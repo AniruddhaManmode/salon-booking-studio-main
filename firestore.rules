@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write access to all collections for development
+    // WARNING: These rules are open for development only
+    // For production, you should implement more secure rules
+    
+    // Bookings collection
+    match /bookings/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+    
+    // Clients collection
+    match /clients/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+    
+    // Staff collection
+    match /staff/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+    
+    // Services collection
+    match /services/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+    
+    // Products collection
+    match /products/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+    
+    // Reviews collection
+    match /reviews/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+    
+    // Feedbacks collection
+    match /feedbacks/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+    
+    // Bills collection
+    match /bills/{documentId} {
+      allow read, write: if request.time < timestamp.date(2025, 1, 31);
+    }
+  }
+}
