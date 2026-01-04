@@ -20,6 +20,8 @@ import { Booking, Client, Staff, Service, Product, Review, Feedback } from "@/ty
 import BillingSection from "./BillingSection";
 import TodaysClients from "./TodaysClients";
 
+// comment
+
 const AdminPanel = () => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("dashboard");
