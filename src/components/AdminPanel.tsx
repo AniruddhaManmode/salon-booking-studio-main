@@ -40,6 +40,14 @@ const AdminPanel = () => {
   const [websiteInquiriesSortBy, setWebsiteInquiriesSortBy] = useState<"name" | "service" | "date">("date");
   const [websiteInquiriesSortOrder, setWebsiteInquiriesSortOrder] = useState<"asc" | "desc">("desc");
 
+  // Sorting and searching states for clients
+  const [clientsSortBy, setClientsSortBy] = useState<"name" | "phone" | "visits" | "lastVisit">("name");
+  const [clientsSortOrder, setClientsSortOrder] = useState<"asc" | "desc">("asc");
+  const [historySortBy, setHistorySortBy] = useState<"date" | "service" | "amount" | "staff">("date");
+  const [historySortOrder, setHistorySortOrder] = useState<"asc" | "desc">("desc");
+  const [clientSearchTerm, setClientSearchTerm] = useState("");
+  const [historySearchTerm, setHistorySearchTerm] = useState("");
+
   // Form states
   const [newClient, setNewClient] = useState({ name: "", contact: "", allergies: "" });
   const [newStaff, setNewStaff] = useState({ name: "", contact: "" });
@@ -58,6 +66,8 @@ const AdminPanel = () => {
   const [showClientHistory, setShowClientHistory] = useState(false);
   const [clientHistorySize, setClientHistorySize] = useState<"small" | "large">("small");
   const [showMoreServices, setShowMoreServices] = useState(false);
+  const [selectedClientForModal, setSelectedClientForModal] = useState<any>(null);
+  const [showClientDetailsModal, setShowClientDetailsModal] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -339,6 +349,89 @@ const AdminPanel = () => {
     });
   };
 
+  // Sorting functions for clients
+  const handleClientsSort = (field: "name" | "phone" | "visits" | "lastVisit") => {
+    if (clientsSortBy === field) {
+      setClientsSortOrder(clientsSortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setClientsSortBy(field);
+      setClientsSortOrder("asc");
+    }
+  };
+
+  const handleHistorySort = (field: "date" | "service" | "amount" | "staff") => {
+    if (historySortBy === field) {
+      setHistorySortOrder(historySortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setHistorySortBy(field);
+      setHistorySortOrder("desc");
+    }
+  };
+
+  const sortClients = (clientsToSort: any[], sortBy: string, sortOrder: "asc" | "desc") => {
+    return clientsToSort.sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          const nameA = a.primaryClient.name.toLowerCase();
+          const nameB = b.primaryClient.name.toLowerCase();
+          return sortOrder === "asc" 
+            ? nameA.localeCompare(nameB) 
+            : nameB.localeCompare(nameA);
+        
+        case "phone":
+          const phoneA = a.primaryClient.contact;
+          const phoneB = b.primaryClient.contact;
+          return sortOrder === "asc" 
+            ? phoneA.localeCompare(phoneB) 
+            : phoneB.localeCompare(phoneA);
+        
+        case "visits":
+          const visitsA = a.sortedHistory.length;
+          const visitsB = b.sortedHistory.length;
+          return sortOrder === "asc" ? visitsA - visitsB : visitsB - visitsA;
+        
+        case "lastVisit":
+          const lastA = a.sortedHistory.length > 0 ? Math.max(...a.sortedHistory.map((s: any) => new Date(s.completedAt).getTime())) : 0;
+          const lastB = b.sortedHistory.length > 0 ? Math.max(...b.sortedHistory.map((s: any) => new Date(s.completedAt).getTime())) : 0;
+          return sortOrder === "asc" ? lastA - lastB : lastB - lastA;
+        
+        default:
+          return 0;
+      }
+    });
+  };
+
+  const sortHistory = (historyToSort: any[], sortBy: string, sortOrder: "asc" | "desc") => {
+    return historyToSort.sort((a, b) => {
+      switch (sortBy) {
+        case "date":
+          const dateA = new Date(a.completedAt).getTime();
+          const dateB = new Date(b.completedAt).getTime();
+          return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
+        
+        case "service":
+          const serviceA = a.services.join(" + ").toLowerCase();
+          const serviceB = b.services.join(" + ").toLowerCase();
+          return sortOrder === "asc" 
+            ? serviceA.localeCompare(serviceB) 
+            : serviceB.localeCompare(serviceA);
+        
+        case "amount":
+          return sortOrder === "asc" ? a.amount - b.amount : b.amount - a.amount;
+        
+        case "staff":
+          const staffA = (a.staff || "").toLowerCase();
+          const staffB = (b.staff || "").toLowerCase();
+          return sortOrder === "asc" 
+            ? staffA.localeCompare(staffB) 
+            : staffB.localeCompare(staffA);
+        
+        default:
+          return 0;
+      }
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -564,175 +657,344 @@ const AdminPanel = () => {
                 <Search className="h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Search clients..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={clientSearchTerm}
+                  onChange={(e) => setClientSearchTerm(e.target.value)}
                   className="w-64"
                 />
               </div>
             </div>
 
-            {/* Client Cards with Service History */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(() => {
-                // Group clients by normalized phone number
-                const normalizePhone = (phone: string) => phone.replace(/\+91|\s|-/g, '').trim();
-                
-                const groupedClients = clients.reduce((groups, client) => {
-                  const normalizedPhone = normalizePhone(client.contact);
-                  if (!groups[normalizedPhone]) {
-                    groups[normalizedPhone] = {
-                      normalizedPhone,
-                      clients: [],
-                      allServiceHistory: [],
-                      allAllergies: new Set()
-                    };
-                  }
-                  groups[normalizedPhone].clients.push(client);
-                  
-                  // Combine all service histories
-                  if (client.serviceHistory) {
-                    groups[normalizedPhone].allServiceHistory.push(...client.serviceHistory);
-                  }
-                  
-                  // Combine all allergies
-                  if (client.allergies) {
-                    groups[normalizedPhone].allAllergies.add(client.allergies);
-                  }
-                  
-                  return groups;
-                }, {} as Record<string, {
-                  normalizedPhone: string;
-                  clients: typeof clients;
-                  allServiceHistory: any[];
-                  allAllergies: Set<string>;
-                }>);
-
-                // Filter grouped clients based on search
-                const filteredGroups = Object.values(groupedClients).filter(group => {
-                  const normalizedSearchTerm = searchTerm.replace(/\+91|\s|-/g, '').trim();
-                  
-                  return (
-                    group.clients.some(client => 
-                      client.name.toLowerCase().includes(searchTerm.toLowerCase())
-                    ) ||
-                    group.normalizedPhone.includes(normalizedSearchTerm)
-                  );
-                });
-
-                return filteredGroups.map((group) => {
-                  // Use the most recent client's name as the display name
-                  const primaryClient = group.clients.reduce((latest, client) => {
-                    const latestDate = new Date(latest.updatedAt || latest.createdAt).getTime();
-                    const clientDate = new Date(client.updatedAt || client.createdAt).getTime();
-                    return clientDate > latestDate ? client : latest;
-                  });
-
-                  // Sort service history by date (newest first)
-                  const sortedHistory = group.allServiceHistory
-                    .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
-
-                  return (
-                    <Card key={group.normalizedPhone} className="overflow-hidden">
-                      <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-semibold text-lg text-gray-900">{primaryClient.name}</h3>
-                            <p className="text-sm text-gray-600 flex items-center mt-1">
-                              <Phone className="w-4 h-4 mr-1" />
-                              {primaryClient.contact}
-                            </p>
-                            {group.clients.length > 1 && (
-                              <p className="text-xs text-blue-600 mt-1">
-                                {group.clients.length} entries merged
-                              </p>
-                            )}
-                          </div>
-                          <Badge className="bg-blue-100 text-blue-800">
-                            {sortedHistory.length} Services
-                          </Badge>
-                        </div>
-                        {group.allAllergies.size > 0 && (
-                          <div className="mt-2 p-2 bg-yellow-50 rounded text-sm text-yellow-800">
-                            <span className="font-medium">Allergies:</span> {Array.from(group.allAllergies).join(", ")}
-                          </div>
-                        )}
-                      </CardHeader>
-                      <CardContent className="p-4">
-                        <h4 className="font-medium text-sm text-gray-700 mb-3">Service History</h4>
-                        {sortedHistory.length > 0 ? (
-                          <div className="space-y-3 max-h-64 overflow-y-auto">
-                            {sortedHistory
-                              .slice(0, 5) // Show last 5 services
-                              .map((service, index) => (
-                                <div key={index} className="border-l-2 border-blue-200 pl-3 py-2">
-                                  <div className="flex justify-between items-start">
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium text-gray-900">
-                                        {service.services.join(" + ")}
-                                      </p>
-                                      <p className="text-xs text-gray-500">
-                                        {new Date(service.date).toLocaleDateString()}
-                                      </p>
-                                      <p className="text-xs text-gray-600">
-                                        Staff: {service.staff}
-                                      </p>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="text-sm font-semibold text-green-600">₹{service.amount}</p>
-                                      <p className="text-xs text-gray-500">{service.paymentMode}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            {sortedHistory.length > 5 && (
-                              <p className="text-xs text-gray-500 text-center pt-2">
-                                +{sortedHistory.length - 5} more services
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-500 text-center py-4">
-                            No service history available
-                          </p>
-                        )}
-                        
-                        {/* Total spent */}
-                        {sortedHistory.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-gray-200">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600">Total Spent:</span>
-                              <span className="font-semibold text-green-600">
-                                ₹{sortedHistory.reduce((total, service) => total + service.amount, 0)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center mt-1">
-                              <span className="text-sm text-gray-600">First Visit:</span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(Math.min(...sortedHistory.map(s => new Date(s.completedAt).getTime()))).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center mt-1">
-                              <span className="text-sm text-gray-600">Last Visit:</span>
-                              <span className="text-xs text-gray-500">
-                                {new Date(Math.max(...sortedHistory.map(s => new Date(s.completedAt).getTime()))).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                });
-              })()}
+            {/* Sorting Controls */}
+            <div className="flex items-center gap-4 bg-white p-4 rounded-lg border">
+              <span className="text-sm font-medium text-gray-700">Sort by:</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleClientsSort("name")}
+                className="flex items-center gap-1"
+              >
+                Name
+                {getSortIcon("name", clientsSortBy, clientsSortOrder)}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleClientsSort("phone")}
+                className="flex items-center gap-1"
+              >
+                Phone
+                {getSortIcon("phone", clientsSortBy, clientsSortOrder)}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleClientsSort("visits")}
+                className="flex items-center gap-1"
+              >
+                Visits
+                {getSortIcon("visits", clientsSortBy, clientsSortOrder)}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleClientsSort("lastVisit")}
+                className="flex items-center gap-1"
+              >
+                Last Visit
+                {getSortIcon("lastVisit", clientsSortBy, clientsSortOrder)}
+              </Button>
             </div>
 
-            {clients.length === 0 && (
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <p className="text-gray-500">No clients found. Complete some services to see client history here.</p>
-                </CardContent>
-              </Card>
-            )}
+            {/* Client Rows */}
+            <Card>
+              <CardContent className="p-0">
+                {(() => {
+                  // Group clients by normalized phone number
+                  const normalizePhone = (phone: string) => phone.replace(/\+91|\s|-/g, '').trim();
+                  
+                  const groupedClients = clients.reduce((groups, client) => {
+                    const normalizedPhone = normalizePhone(client.contact);
+                    if (!groups[normalizedPhone]) {
+                      groups[normalizedPhone] = {
+                        normalizedPhone,
+                        clients: [],
+                        allServiceHistory: [],
+                        allAllergies: new Set()
+                      };
+                    }
+                    groups[normalizedPhone].clients.push(client);
+                    
+                    // Combine all service histories
+                    if (client.serviceHistory) {
+                      groups[normalizedPhone].allServiceHistory.push(...client.serviceHistory);
+                    }
+                    
+                    // Combine all allergies
+                    if (client.allergies) {
+                      groups[normalizedPhone].allAllergies.add(client.allergies);
+                    }
+                    
+                    return groups;
+                  }, {} as Record<string, {
+                    normalizedPhone: string;
+                    clients: typeof clients;
+                    allServiceHistory: any[];
+                    allAllergies: Set<string>;
+                  }>);
+
+                  // Filter and sort grouped clients
+                  const filteredGroups = Object.values(groupedClients)
+                    .filter(group => {
+                      const normalizedSearchTerm = clientSearchTerm.replace(/\+91|\s|-/g, '').trim();
+                      
+                      return (
+                        group.clients.some(client => 
+                          client.name.toLowerCase().includes(clientSearchTerm.toLowerCase())
+                        ) ||
+                        group.normalizedPhone.includes(normalizedSearchTerm)
+                      );
+                    })
+                    .map(group => {
+                      // Use the most recent client's name as the display name
+                      const primaryClient = group.clients.reduce((latest, client) => {
+                        const latestDate = new Date(latest.updatedAt || latest.createdAt).getTime();
+                        const clientDate = new Date(client.updatedAt || client.createdAt).getTime();
+                        return clientDate > latestDate ? client : latest;
+                      });
+
+                      // Sort service history by date (newest first)
+                      const sortedHistory = group.allServiceHistory
+                        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+
+                      return {
+                        ...group,
+                        primaryClient,
+                        sortedHistory
+                      };
+                    });
+
+                  const sortedGroups = sortClients(filteredGroups, clientsSortBy, clientsSortOrder);
+
+                  return sortedGroups.length > 0 ? (
+                    <div className="divide-y">
+                      {sortedGroups.map((group) => (
+                        <div
+                          key={group.normalizedPhone}
+                          className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => {
+                            setSelectedClientForModal(group);
+                            setShowClientDetailsModal(true);
+                            setHistorySearchTerm("");
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-4">
+                                <div>
+                                  <h3 className="font-semibold text-lg text-gray-900">{group.primaryClient.name}</h3>
+                                  <p className="text-sm text-gray-600 flex items-center mt-1">
+                                    <Phone className="w-4 h-4 mr-1" />
+                                    {group.primaryClient.contact}
+                                  </p>
+                                </div>
+                                {group.clients.length > 1 && (
+                                  <Badge variant="outline" className="text-blue-600">
+                                    {group.clients.length} entries merged
+                                  </Badge>
+                                )}
+                                {group.allAllergies.size > 0 && (
+                                  <Badge variant="outline" className="text-yellow-600">
+                                    Allergies: {Array.from(group.allAllergies).join(", ")}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <p className="text-sm font-medium text-gray-900">{group.sortedHistory.length} Visits</p>
+                                <p className="text-xs text-gray-500">
+                                  {group.sortedHistory.length > 0 
+                                    ? `Last: ${new Date(group.sortedHistory[0].completedAt).toLocaleDateString()}`
+                                    : "No visits"
+                                  }
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-semibold text-green-600">
+                                  ₹{group.sortedHistory.reduce((total, service) => total + service.amount, 0)}
+                                </p>
+                                <p className="text-xs text-gray-500">Total spent</p>
+                              </div>
+                              <ArrowUpDown className="h-4 w-4 text-gray-400" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <p className="text-gray-500">
+                        {clientSearchTerm ? "No clients found matching your search." : "No clients found. Complete some services to see client history here."}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Client Details Modal */}
+            <Dialog open={showClientDetailsModal} onOpenChange={setShowClientDetailsModal}>
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Client Details - {selectedClientForModal?.primaryClient?.name}
+                  </DialogTitle>
+                </DialogHeader>
+                
+                {selectedClientForModal && (
+                  <div className="space-y-6">
+                    {/* Client Info */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Name</p>
+                        <p className="font-semibold">{selectedClientForModal.primaryClient.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Phone</p>
+                        <p className="font-semibold">{selectedClientForModal.primaryClient.contact}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Total Visits</p>
+                        <p className="font-semibold">{selectedClientForModal.sortedHistory.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Total Spent</p>
+                        <p className="font-semibold text-green-600">
+                          ₹{selectedClientForModal.sortedHistory.reduce((total, service) => total + service.amount, 0)}
+                        </p>
+                      </div>
+                      {selectedClientForModal.allAllergies.size > 0 && (
+                        <div className="md:col-span-2">
+                          <p className="text-sm font-medium text-gray-700">Allergies</p>
+                          <p className="text-sm text-yellow-600">{Array.from(selectedClientForModal.allAllergies).join(", ")}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Service History Search and Sort */}
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold text-gray-900">Service History</h3>
+                      <div className="flex items-center space-x-2">
+                        <Search className="h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="Search services..."
+                          value={historySearchTerm}
+                          onChange={(e) => setHistorySearchTerm(e.target.value)}
+                          className="w-48"
+                        />
+                      </div>
+                    </div>
+
+                    {/* History Sorting Controls */}
+                    <div className="flex items-center gap-2 bg-white p-3 rounded-lg border">
+                      <span className="text-sm font-medium text-gray-700">Sort by:</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleHistorySort("date")}
+                        className="flex items-center gap-1"
+                      >
+                        Date
+                        {getSortIcon("date", historySortBy, historySortOrder)}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleHistorySort("service")}
+                        className="flex items-center gap-1"
+                      >
+                        Service
+                        {getSortIcon("service", historySortBy, historySortOrder)}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleHistorySort("amount")}
+                        className="flex items-center gap-1"
+                      >
+                        Amount
+                        {getSortIcon("amount", historySortBy, historySortOrder)}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleHistorySort("staff")}
+                        className="flex items-center gap-1"
+                      >
+                        Staff
+                        {getSortIcon("staff", historySortBy, historySortOrder)}
+                      </Button>
+                    </div>
+
+                    {/* Service History Table */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Services</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {(() => {
+                            const filteredHistory = selectedClientForModal.sortedHistory.filter(service => 
+                              service.services.some((s: string) => 
+                                s.toLowerCase().includes(historySearchTerm.toLowerCase())
+                              ) ||
+                              (service.staff && service.staff.toLowerCase().includes(historySearchTerm.toLowerCase()))
+                            );
+                            
+                            const sortedHistory = sortHistory(filteredHistory, historySortBy, historySortOrder);
+                            
+                            return sortedHistory.length > 0 ? (
+                              sortedHistory.map((service, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {new Date(service.date).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-4 py-4 text-sm text-gray-900">
+                                    {service.services.join(" + ")}
+                                  </td>
+                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {service.staff || "N/A"}
+                                  </td>
+                                  <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
+                                    ₹{service.amount}
+                                  </td>
+                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {service.paymentMode}
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                                  {historySearchTerm ? "No services found matching your search." : "No service history available."}
+                                </td>
+                              </tr>
+                            );
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Staff Tab */}
