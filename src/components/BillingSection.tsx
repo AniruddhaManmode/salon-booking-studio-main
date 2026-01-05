@@ -130,11 +130,12 @@ const BillingSection = () => {
       const servicesList = booking.services || [booking.service];
       const billingItems = servicesList.map((serviceName: string) => {
         const service = services.find(s => s.name === serviceName);
+        const rate = booking.amount || (service?.secretPrice || 0);
         return {
           service: serviceName,
-          rate: booking.amount || (service?.rate || 0),
+          rate: rate,
           quantity: 1,
-          total: booking.amount || (service?.rate || 0)
+          total: rate
         };
       });
 
@@ -142,11 +143,11 @@ const BillingSection = () => {
       const billingRecord = {
         clientName: booking.name,
         clientContact: booking.phone,
-        staff: booking.completedBy || "Unknown",
+        staff: booking.completedBy || booking.staff || "Unknown",
         paymentMode: booking.paymentMode || "cash",
         items: billingItems,
         totalAmount: booking.amount || billingItems.reduce((sum: number, item: any) => sum + item.total, 0),
-        date: booking.date,
+        date: booking.date || new Date().toISOString().split('T')[0],
         createdAt: new Date(),
         status: "completed" as const
       };
@@ -163,7 +164,7 @@ const BillingSection = () => {
   };
 
   const calculateTotal = (items: BillingItem[]) => {
-    return items.reduce((sum, item) => sum + item.total, 0);
+    return items.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
   };
 
   const updateBillingItem = (index: number, field: string, value: any) => {
@@ -174,10 +175,10 @@ const BillingSection = () => {
     if (field === "service" || field === "quantity" || field === "rate") {
       const service = services.find(s => s.name === value);
       if (service) {
-        updatedItems[index].rate = service.rate;
-        updatedItems[index].total = service.rate * (updatedItems[index].quantity || 1);
+        updatedItems[index].rate = service.secretPrice || 0;
+        updatedItems[index].total = (service.secretPrice || 0) * (updatedItems[index].quantity || 1);
       } else if (field === "quantity" || field === "rate") {
-        updatedItems[index].total = updatedItems[index].rate * updatedItems[index].quantity;
+        updatedItems[index].total = (updatedItems[index].rate || 0) * (updatedItems[index].quantity || 1);
       }
     }
     
@@ -197,15 +198,51 @@ const BillingSection = () => {
   };
 
   const createBilling = async () => {
-    try {
-      const totalAmount = calculateTotal(newBilling.items);
-      await addDoc(collection(db, "billing"), {
-        ...newBilling,
-        totalAmount,
-        date: new Date().toISOString(),
-        createdAt: new Date(),
-        status: "pending"
+    if (!newBilling.clientName || !newBilling.clientContact || !newBilling.staff || !newBilling.paymentMode) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
       });
+      return;
+    }
+
+    const hasValidItems = newBilling.items.some(item => item.service && item.rate > 0);
+    if (!hasValidItems) {
+      toast({
+        title: "Error",
+        description: "Please add at least one valid service.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      // Test collection access first
+      const testDoc = {
+        test: true,
+        timestamp: new Date()
+      };
+      
+      const totalAmount = calculateTotal(newBilling.items);
+      
+      // Validate data structure before sending
+      const billingData = {
+        clientName: newBilling.clientName.trim(),
+        clientContact: newBilling.clientContact.trim(),
+        staff: newBilling.staff.trim(),
+        paymentMode: newBilling.paymentMode.trim(),
+        items: newBilling.items.filter(item => item.service && item.rate > 0),
+        totalAmount,
+        date: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
+        createdAt: new Date(),
+        status: "pending" as const
+      };
+
+      console.log("Sending billing data:", billingData);
+      
+      const docRef = await addDoc(collection(db, "billing"), billingData);
+      console.log("Billing created with ID:", docRef.id);
       
       // Reset form
       setNewBilling({
@@ -216,8 +253,31 @@ const BillingSection = () => {
         items: [{ service: "", rate: 0, quantity: 1, total: 0 }]
       });
       setShowNewBilling(false);
+      
+      toast({
+        title: "Billing Created",
+        description: `Billing record created for ${billingData.clientName}.`,
+      });
     } catch (error) {
       console.error("Error creating billing:", error);
+      
+      let errorMessage = "Failed to create billing. Please try again.";
+      
+      if (error.code === "permission-denied") {
+        errorMessage = "Permission denied. Check Firebase rules.";
+      } else if (error.code === "unavailable") {
+        errorMessage = "Network error. Please check your connection.";
+      } else if (error.code === "invalid-argument") {
+        errorMessage = "Invalid data format. Please check your inputs.";
+      } else if (error.message) {
+        errorMessage = `Failed to create billing: ${error.message}`;
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     }
   };
 

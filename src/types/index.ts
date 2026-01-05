@@ -41,6 +41,7 @@ export interface Staff {
   id: string;
   name: string;
   contact: string;
+  balance?: number;
   createdAt: any;
 }
 

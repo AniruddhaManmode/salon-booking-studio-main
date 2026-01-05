@@ -210,8 +210,8 @@ const AdminPanel = () => {
     inquiries: filteredBookings.filter(b => b.status === "pending").length,
     feedbacks: filteredFeedbacks.length,
     revenue: filteredBookings
-      .filter(b => b.status === "completed" && b.amount)
-      .reduce((sum, b) => sum + (b.amount || 0), 0),
+      .filter(b => b.status === "completed" && b.amount && !isNaN(b.amount))
+      .reduce((sum, b) => sum + Number(b.amount), 0),
     completedBookings: filteredBookings.filter(b => b.status === "completed").length,
     totalBookings: filteredBookings.length,
     lowStockProducts: products.filter(p => p.quantity < 5).length
@@ -229,26 +229,63 @@ const AdminPanel = () => {
 
   // Add functions
   const addClient = async () => {
+    if (!newClient.name || !newClient.contact) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       await addDoc(collection(db, "clients"), {
         ...newClient,
         createdAt: new Date()
       });
       setNewClient({ name: "", contact: "", allergies: "" });
+      toast({
+        title: "Client Added",
+        description: `${newClient.name} has been added successfully.`,
+      });
     } catch (error) {
       console.error("Error adding client:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add client. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
   const addStaff = async () => {
+    if (!newStaff.name || !newStaff.contact) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       await addDoc(collection(db, "staff"), {
         ...newStaff,
+        balance: 0,
         createdAt: new Date()
       });
       setNewStaff({ name: "", contact: "" });
+      toast({
+        title: "Staff Added",
+        description: `${newStaff.name} has been added successfully.`,
+      });
     } catch (error) {
       console.error("Error adding staff:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add staff member. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -272,9 +309,21 @@ const AdminPanel = () => {
   };
 
   const addService = async () => {
+    if (!newService.name || !newService.timeRequired || !newService.secretPrice) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       await addDoc(collection(db, "services"), {
         ...newService,
+        priceRange: { from: newService.secretPrice, to: newService.secretPrice },
+        image: "",
+        description: "",
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -286,8 +335,17 @@ const AdminPanel = () => {
         timeRequired: "", 
         description: "" 
       });
+      toast({
+        title: "Service Added",
+        description: `${newService.name} has been added successfully.`,
+      });
     } catch (error) {
       console.error("Error adding service:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add service. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -329,14 +387,32 @@ const AdminPanel = () => {
   };
 
   const addProduct = async () => {
+    if (!newProduct.name || !newProduct.brand || !newProduct.quantity || !newProduct.price) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       await addDoc(collection(db, "products"), {
         ...newProduct,
         createdAt: new Date()
       });
       setNewProduct({ name: "", brand: "", quantity: 0, price: 0 });
+      toast({
+        title: "Product Added",
+        description: `${newProduct.name} has been added successfully.`,
+      });
     } catch (error) {
       console.error("Error adding product:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add product. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1607,7 +1683,7 @@ const AdminPanel = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {sortBookings(bookings.filter(b => b.source === 'website'), websiteInquiriesSortBy, websiteInquiriesSortOrder).slice(0, 5).map((booking) => (
+                    {sortBookings(filteredBookings, websiteInquiriesSortBy, websiteInquiriesSortOrder).slice(0, 5).map((booking) => (
                       <div key={booking.id} className="p-3 border rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-medium">{booking.name}</p>
@@ -1642,8 +1718,8 @@ const AdminPanel = () => {
                         </div>
                       </div>
                     ))}
-                    {bookings.filter(b => b.source === 'website').length === 0 && (
-                      <p className="text-center text-gray-500 py-8">No website inquiries yet.</p>
+                    {filteredBookings.length === 0 && (
+                      <p className="text-center text-gray-500 py-8">No inquiries yet.</p>
                     )}
                   </div>
                 </CardContent>
