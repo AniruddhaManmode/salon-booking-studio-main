@@ -20,7 +20,8 @@ import { Booking, Client, Staff, Service, Product, Review, Feedback } from "@/ty
 import BillingSection from "./BillingSection";
 import TodaysClients from "./TodaysClients";
 
-// comment
+// comment nahi karunga - yeh comment kaise likhna hai?
+// ye comment hindi mein likha gaya hai
 
 const AdminPanel = () => {
   const { toast } = useToast();
