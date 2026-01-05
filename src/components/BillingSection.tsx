@@ -385,7 +385,7 @@ const BillingSection = () => {
                             />
                           </td>
                           <td className="px-4 py-2 font-medium">
-                            ${item.total}
+                            ₹{item.total}
                           </td>
                           <td className="px-4 py-2">
                             <Button
@@ -408,7 +408,7 @@ const BillingSection = () => {
               {/* Total */}
               <div className="flex justify-end">
                 <div className="text-right">
-                  <p className="text-lg font-semibold">Total: ${calculateTotal(newBilling.items)}</p>
+                  <p className="text-lg font-semibold">Total: ₹{calculateTotal(newBilling.items)}</p>
                 </div>
               </div>
 
@@ -476,7 +476,7 @@ const BillingSection = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap font-medium">
-                      ${record.totalAmount}
+                      ₹{record.totalAmount}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex items-center">

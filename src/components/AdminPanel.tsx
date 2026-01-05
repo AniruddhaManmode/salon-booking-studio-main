@@ -154,13 +154,66 @@ const AdminPanel = () => {
     fetchData();
   }, []);
 
-  // Calculate stats
+  // Calculate stats with time range filtering
+  const getFilteredBookings = () => {
+    const now = new Date();
+    const filterDate = new Date();
+    
+    switch (timeRange) {
+      case "24h":
+        filterDate.setHours(now.getHours() - 24);
+        break;
+      case "7d":
+        filterDate.setDate(now.getDate() - 7);
+        break;
+      case "30d":
+        filterDate.setDate(now.getDate() - 30);
+        break;
+      case "90d":
+        filterDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        filterDate.setDate(now.getDate() - 7);
+    }
+    
+    return bookings.filter(booking => {
+      const bookingDate = booking.createdAt?.toDate?.() || new Date(booking.timestamp);
+      return bookingDate >= filterDate;
+    });
+  };
+
+  const filteredBookings = getFilteredBookings();
+  const filteredFeedbacks = feedbacks.filter(feedback => {
+    const feedbackDate = feedback.createdAt ? new Date(feedback.createdAt) : new Date(feedback.timestamp);
+    const filterDate = new Date();
+    switch (timeRange) {
+      case "24h":
+        filterDate.setHours(filterDate.getHours() - 24);
+        break;
+      case "7d":
+        filterDate.setDate(filterDate.getDate() - 7);
+        break;
+      case "30d":
+        filterDate.setDate(filterDate.getDate() - 30);
+        break;
+      case "90d":
+        filterDate.setDate(filterDate.getDate() - 90);
+        break;
+      default:
+        filterDate.setDate(filterDate.getDate() - 7);
+    }
+    return feedbackDate >= filterDate;
+  });
+
   const stats = {
     services: services.length,
-    inquiries: bookings.filter(b => b.status === "pending").length,
-    feedbacks: feedbacks.length,
-    completedBookings: bookings.filter(b => b.status === "completed").length,
-    totalBookings: bookings.length,
+    inquiries: filteredBookings.filter(b => b.status === "pending").length,
+    feedbacks: filteredFeedbacks.length,
+    revenue: filteredBookings
+      .filter(b => b.status === "completed" && b.amount)
+      .reduce((sum, b) => sum + (b.amount || 0), 0),
+    completedBookings: filteredBookings.filter(b => b.status === "completed").length,
+    totalBookings: filteredBookings.length,
     lowStockProducts: products.filter(p => p.quantity < 5).length
   };
 
@@ -508,6 +561,20 @@ const AdminPanel = () => {
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
+                    <div className="flex-shrink-0 bg-green-100 rounded-lg p-3">
+                      <DollarSign className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-500">Revenue</p>
+                      <p className="text-2xl font-semibold text-gray-900">₹{stats.revenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
                     <div className="flex-shrink-0 bg-yellow-100 rounded-lg p-3">
                       <MessageSquare className="h-6 w-6 text-yellow-600" />
                     </div>
@@ -599,7 +666,7 @@ const AdminPanel = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {sortBookings(bookings.slice(0, 5), inquiriesSortBy, inquiriesSortOrder).map((booking) => (
+                    {sortBookings(filteredBookings.slice(0, 5), inquiriesSortBy, inquiriesSortOrder).map((booking) => (
                       <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div>
                           <p className="font-medium">{booking.name}</p>
@@ -655,14 +722,59 @@ const AdminPanel = () => {
           <TabsContent value="clients" className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-900">Clients History</h2>
-              <div className="flex items-center space-x-2">
-                <Search className="h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search clients..."
-                  value={clientSearchTerm}
-                  onChange={(e) => setClientSearchTerm(e.target.value)}
-                  className="w-64"
-                />
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <Search className="h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search clients..."
+                    value={clientSearchTerm}
+                    onChange={(e) => setClientSearchTerm(e.target.value)}
+                    className="w-64"
+                  />
+                </div>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Client
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Client</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="client-name">Client Name</Label>
+                        <Input
+                          id="client-name"
+                          value={newClient.name}
+                          onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                          placeholder="Enter client name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="client-contact">Contact</Label>
+                        <Input
+                          id="client-contact"
+                          value={newClient.contact}
+                          onChange={(e) => setNewClient({ ...newClient, contact: e.target.value })}
+                          placeholder="Enter phone number"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="client-allergies">Allergies (Optional)</Label>
+                        <Input
+                          id="client-allergies"
+                          value={newClient.allergies}
+                          onChange={(e) => setNewClient({ ...newClient, allergies: e.target.value })}
+                          placeholder="Enter any allergies"
+                        />
+                      </div>
+                      <Button onClick={addClient} className="w-full">Add Client</Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
 
@@ -1055,6 +1167,7 @@ const AdminPanel = () => {
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Balance</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
@@ -1069,17 +1182,36 @@ const AdminPanel = () => {
                           <td className="px-6 py-4 whitespace-nowrap font-medium">{member.name}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{member.contact}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => {
-                                if (window.confirm(`Are you sure you want to remove ${member.name} from staff?`)) {
-                                  deleteStaff(member.id, member.name);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <span className="text-sm font-medium text-green-600">
+                              ₹{(member.balance || 0).toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  toast({
+                                    title: "Update Balance",
+                                    description: "Balance update functionality coming soon.",
+                                  });
+                                }}
+                              >
+                                <CreditCard className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                  if (window.confirm(`Are you sure you want to remove ${member.name} from staff?`)) {
+                                    deleteStaff(member.id, member.name);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1115,7 +1247,7 @@ const AdminPanel = () => {
                     Add Service
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Add New Service</DialogTitle>
                   </DialogHeader>
@@ -1130,56 +1262,6 @@ const AdminPanel = () => {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="service-image">Service Image URL</Label>
-                      <Input
-                        id="service-image"
-                        value={newService.image}
-                        onChange={(e) => setNewService({ ...newService, image: e.target.value })}
-                        placeholder="https://example.com/image.jpg"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="price-from">Price From (₹)</Label>
-                        <Input
-                          id="price-from"
-                          type="number"
-                          value={newService.priceRange.from}
-                          onChange={(e) => setNewService({ 
-                            ...newService, 
-                            priceRange: { ...newService.priceRange, from: Number(e.target.value) }
-                          })}
-                          placeholder="199"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="price-to">Price To (₹)</Label>
-                        <Input
-                          id="price-to"
-                          type="number"
-                          value={newService.priceRange.to}
-                          onChange={(e) => setNewService({ 
-                            ...newService, 
-                            priceRange: { ...newService.priceRange, to: Number(e.target.value) }
-                          })}
-                          placeholder="549"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="secret-price">Secret Price (₹) - For Revenue Calculation</Label>
-                      <Input
-                        id="secret-price"
-                        type="number"
-                        value={newService.secretPrice}
-                        onChange={(e) => setNewService({ ...newService, secretPrice: Number(e.target.value) })}
-                        placeholder="Actual price for revenue (not shown to customers)"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        This price is used for revenue calculations but won't be displayed to customers
-                      </p>
-                    </div>
-                    <div>
                       <Label htmlFor="service-time">Time Required</Label>
                       <Input
                         id="service-time"
@@ -1189,13 +1271,13 @@ const AdminPanel = () => {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="service-description">Description</Label>
-                      <textarea
-                        id="service-description"
-                        value={newService.description}
-                        onChange={(e) => setNewService({ ...newService, description: e.target.value })}
-                        placeholder="Describe the service in detail..."
-                        className="w-full h-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      <Label htmlFor="service-rate">Rate (₹)</Label>
+                      <Input
+                        id="service-rate"
+                        type="number"
+                        value={newService.secretPrice}
+                        onChange={(e) => setNewService({ ...newService, secretPrice: Number(e.target.value) })}
+                        placeholder="Enter service rate"
                       />
                     </div>
                     <Button onClick={addService} className="w-full">Add Service</Button>
@@ -1210,10 +1292,9 @@ const AdminPanel = () => {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price Range</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Secret Price</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service Name</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time Required</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
@@ -1224,34 +1305,14 @@ const AdminPanel = () => {
                         )
                         .map((service) => (
                         <tr key={service.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              {service.image && (
-                                <img 
-                                  src={service.image} 
-                                  alt={service.name}
-                                  className="h-10 w-10 rounded-lg object-cover mr-3"
-                                />
-                              )}
-                              <div>
-                                <p className="font-medium">{service.name}</p>
-                                <p className="text-sm text-gray-500 line-clamp-2">{service.description}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm font-medium">
-                              ₹{service.priceRange.from} - ₹{service.priceRange.to}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm text-green-600 font-medium">
-                              ₹{service.secretPrice}
-                            </span>
-                            <p className="text-xs text-gray-500">Hidden</p>
-                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium">{service.name}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {service.timeRequired}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-medium text-green-600">
+                              ₹{service.secretPrice}
+                            </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex space-x-2">
@@ -1261,7 +1322,7 @@ const AdminPanel = () => {
                                     <Edit2 className="h-4 w-4" />
                                   </Button>
                                 </DialogTrigger>
-                                <DialogContent className="max-w-2xl">
+                                <DialogContent>
                                   <DialogHeader>
                                     <DialogTitle>Edit Service</DialogTitle>
                                   </DialogHeader>
@@ -1275,43 +1336,6 @@ const AdminPanel = () => {
                                       />
                                     </div>
                                     <div>
-                                      <Label htmlFor="edit-service-image">Service Image URL</Label>
-                                      <Input
-                                        id="edit-service-image"
-                                        defaultValue={service.image}
-                                        placeholder="https://example.com/image.jpg"
-                                      />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                        <Label htmlFor="edit-price-from">Price From (₹)</Label>
-                                        <Input
-                                          id="edit-price-from"
-                                          type="number"
-                                          defaultValue={service.priceRange.from}
-                                          placeholder="199"
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label htmlFor="edit-price-to">Price To (₹)</Label>
-                                        <Input
-                                          id="edit-price-to"
-                                          type="number"
-                                          defaultValue={service.priceRange.to}
-                                          placeholder="549"
-                                        />
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <Label htmlFor="edit-secret-price">Secret Price (₹)</Label>
-                                      <Input
-                                        id="edit-secret-price"
-                                        type="number"
-                                        defaultValue={service.secretPrice}
-                                        placeholder="Actual price for revenue"
-                                      />
-                                    </div>
-                                    <div>
                                       <Label htmlFor="edit-service-time">Time Required</Label>
                                       <Input
                                         id="edit-service-time"
@@ -1320,26 +1344,20 @@ const AdminPanel = () => {
                                       />
                                     </div>
                                     <div>
-                                      <Label htmlFor="edit-service-description">Description</Label>
-                                      <textarea
-                                        id="edit-service-description"
-                                        defaultValue={service.description}
-                                        placeholder="Describe the service in detail..."
-                                        className="w-full h-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      <Label htmlFor="edit-service-rate">Rate (₹)</Label>
+                                      <Input
+                                        id="edit-service-rate"
+                                        type="number"
+                                        defaultValue={service.secretPrice}
+                                        placeholder="Enter service rate"
                                       />
                                     </div>
                                     <Button 
                                       onClick={() => {
                                         const updatedService = {
                                           name: (document.getElementById('edit-service-name') as HTMLInputElement)?.value || service.name,
-                                          image: (document.getElementById('edit-service-image') as HTMLInputElement)?.value || service.image,
-                                          priceRange: {
-                                            from: Number((document.getElementById('edit-price-from') as HTMLInputElement)?.value) || service.priceRange.from,
-                                            to: Number((document.getElementById('edit-price-to') as HTMLInputElement)?.value) || service.priceRange.to
-                                          },
-                                          secretPrice: Number((document.getElementById('edit-secret-price') as HTMLInputElement)?.value) || service.secretPrice,
                                           timeRequired: (document.getElementById('edit-service-time') as HTMLInputElement)?.value || service.timeRequired,
-                                          description: (document.getElementById('edit-service-description') as HTMLTextAreaElement)?.value || service.description
+                                          secretPrice: Number((document.getElementById('edit-service-rate') as HTMLInputElement)?.value) || service.secretPrice
                                         };
                                         updateService(service.id, updatedService);
                                       }}
@@ -1365,6 +1383,12 @@ const AdminPanel = () => {
                     </tbody>
                   </table>
                 </div>
+                {services.length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No services added yet.</p>
+                    <p className="text-sm text-gray-400 mt-2">Click "Add Service" to add your first service.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1412,6 +1436,7 @@ const AdminPanel = () => {
                         id="product-name"
                         value={newProduct.name}
                         onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                        placeholder="Enter product name"
                       />
                     </div>
                     <div>
@@ -1420,6 +1445,7 @@ const AdminPanel = () => {
                         id="product-brand"
                         value={newProduct.brand}
                         onChange={(e) => setNewProduct({ ...newProduct, brand: e.target.value })}
+                        placeholder="Enter brand name"
                       />
                     </div>
                     <div>
@@ -1429,6 +1455,7 @@ const AdminPanel = () => {
                         type="number"
                         value={newProduct.quantity}
                         onChange={(e) => setNewProduct({ ...newProduct, quantity: Number(e.target.value) })}
+                        placeholder="Enter quantity"
                       />
                     </div>
                     <div>
@@ -1438,6 +1465,7 @@ const AdminPanel = () => {
                         type="number"
                         value={newProduct.price}
                         onChange={(e) => setNewProduct({ ...newProduct, price: Number(e.target.value) })}
+                        placeholder="Enter price"
                       />
                     </div>
                     <Button onClick={addProduct} className="w-full">Add Product</Button>
@@ -1459,7 +1487,12 @@ const AdminPanel = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {products.map((product) => (
+                      {products
+                        .filter(product => 
+                          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          product.brand.toLowerCase().includes(searchTerm.toLowerCase())
+                        )
+                        .map((product) => (
                         <tr key={product.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap font-medium">{product.name}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{product.brand}</td>
@@ -1467,13 +1500,22 @@ const AdminPanel = () => {
                             <Badge variant={product.quantity < 5 ? "destructive" : "default"}>
                               {product.quantity}
                             </Badge>
+                            {product.quantity < 5 && (
+                              <span className="ml-2 text-xs text-red-600">Low Stock</span>
+                            )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">${product.price}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">₹{product.price}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                {products.length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500">No products added yet.</p>
+                    <p className="text-sm text-gray-400 mt-2">Click "Add Product" to add your first product.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1485,14 +1527,15 @@ const AdminPanel = () => {
 
           {/* Website Tab */}
           <TabsContent value="website" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Website Feedbacks */}
               <Card>
                 <CardHeader>
                   <CardTitle>Website Feedbacks</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {feedbacks.slice(0, 3).map((feedback) => (
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {feedbacks.slice(0, 5).map((feedback) => (
                       <div key={feedback.id} className="p-3 border rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-medium">{feedback.name}</p>
@@ -1519,20 +1562,118 @@ const AdminPanel = () => {
                         </div>
                       </div>
                     ))}
+                    {feedbacks.length === 0 && (
+                      <p className="text-center text-gray-500 py-8">No website feedbacks yet.</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-                          </div>
+              {/* Website Inquiries */}
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <CardTitle>Website Inquiries</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleWebsiteInquiriesSort("name")}
+                        className="flex items-center gap-1"
+                      >
+                        Name
+                        {getSortIcon("name", websiteInquiriesSortBy, websiteInquiriesSortOrder)}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleWebsiteInquiriesSort("service")}
+                        className="flex items-center gap-1"
+                      >
+                        Service
+                        {getSortIcon("service", websiteInquiriesSortBy, websiteInquiriesSortOrder)}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleWebsiteInquiriesSort("date")}
+                        className="flex items-center gap-1"
+                      >
+                        Date
+                        {getSortIcon("date", websiteInquiriesSortBy, websiteInquiriesSortOrder)}
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {sortBookings(bookings.filter(b => b.source === 'website'), websiteInquiriesSortBy, websiteInquiriesSortOrder).slice(0, 5).map((booking) => (
+                      <div key={booking.id} className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium">{booking.name}</p>
+                          <Badge variant={booking.status === "pending" ? "secondary" : "default"}>
+                            {booking.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-600">{booking.service}</p>
+                        <p className="text-xs text-gray-500">
+                          {booking.createdAt?.toDate?.() ? 
+                            new Date(booking.createdAt.toDate()).toLocaleDateString() : 
+                            new Date(booking.timestamp).toLocaleDateString()
+                          }
+                        </p>
+                        {booking.message && (
+                          <p className="text-sm text-gray-600 mt-2 italic">"{booking.message}"</p>
+                        )}
+                        <div className="flex gap-2 mt-3">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              // Convert to client logic here
+                              toast({
+                                title: "Convert to Client",
+                                description: "This inquiry will be converted to a client.",
+                              });
+                            }}
+                          >
+                            Convert to Client
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    {bookings.filter(b => b.source === 'website').length === 0 && (
+                      <p className="text-center text-gray-500 py-8">No website inquiries yet.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
+            {/* Services and Reels Posting */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Services Posting</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-gray-600">Manage and update services displayed on the website</p>
-                  <Button className="mt-4">Manage Services</Button>
+                  <p className="text-gray-600 mb-4">Manage and update services displayed on the website</p>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">Active Services</p>
+                        <p className="text-sm text-gray-500">{services.length} services currently live</p>
+                      </div>
+                      <Button variant="outline" size="sm">Manage</Button>
+                    </div>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">Featured Services</p>
+                        <p className="text-sm text-gray-500">Highlight premium services</p>
+                      </div>
+                      <Button variant="outline" size="sm">Configure</Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1541,8 +1682,23 @@ const AdminPanel = () => {
                   <CardTitle>Reels Posting</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-gray-600">Manage Instagram reels and social media content</p>
-                  <Button className="mt-4">Manage Reels</Button>
+                  <p className="text-gray-600 mb-4">Manage Instagram reels and social media content</p>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">Recent Reels</p>
+                        <p className="text-sm text-gray-500">5 reels this month</p>
+                      </div>
+                      <Button variant="outline" size="sm">View All</Button>
+                    </div>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">Schedule Post</p>
+                        <p className="text-sm text-gray-500">Plan upcoming content</p>
+                      </div>
+                      <Button variant="outline" size="sm">Schedule</Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
