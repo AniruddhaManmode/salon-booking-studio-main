@@ -20,7 +20,8 @@ import { Booking, Client, Staff, Service, Product, Review, Feedback } from "@/ty
 import BillingSection from "./BillingSection";
 import TodaysClients from "./TodaysClients";
 
-// comment
+// comment nahi karunga - yeh comment kaise likhna hai?
+// ye comment hindi mein likha gaya hai
 
 const AdminPanel = () => {
   const { toast } = useToast();
@@ -217,11 +218,11 @@ const AdminPanel = () => {
     lowStockProducts: products.filter(p => p.quantity < 5).length
   };
 
-  // Calculate Client Happiness Index
+  // Calculate Client Happiness Index based on feedback ratings
   const calculateHappinessIndex = () => {
-    if (reviews.length === 0) return 0;
-    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-    const averageRating = totalRating / reviews.length;
+    if (feedbacks.length === 0) return 0;
+    const totalRating = feedbacks.reduce((sum, feedback) => sum + feedback.rating, 0);
+    const averageRating = totalRating / feedbacks.length;
     return Math.round((averageRating / 5) * 100);
   };
 
@@ -665,8 +666,22 @@ const AdminPanel = () => {
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
+                    <div className="flex-shrink-0 bg-green-100 rounded-lg p-3">
+                      <Star className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-500">Client Happiness</p>
+                      <p className="text-2xl font-semibold text-gray-900">{happinessIndex}%</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
                     <div className="flex-shrink-0 bg-purple-100 rounded-lg p-3">
-                      <Star className="h-6 w-6 text-purple-600" />
+                      <MessageSquare className="h-6 w-6 text-purple-600" />
                     </div>
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-500">Feedbacks</p>
@@ -677,13 +692,13 @@ const AdminPanel = () => {
               </Card>
             </div>
 
-            {/* Client Happiness Index */}
+            {/* Client Happiness Index Details */}
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Client Happiness Index</h3>
-                    <p className="text-sm text-gray-500">Based on {reviews.length} reviews</p>
+                    <p className="text-sm text-gray-500">Based on {feedbacks.length} feedback ratings</p>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-green-600">{happinessIndex}%</div>
@@ -1603,15 +1618,14 @@ const AdminPanel = () => {
 
           {/* Website Tab */}
           <TabsContent value="website" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Website Feedbacks */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Website Feedbacks</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {feedbacks.slice(0, 5).map((feedback) => (
+                  <div className="space-y-4">
+                    {feedbacks.slice(0, 3).map((feedback) => (
                       <div key={feedback.id} className="p-3 border rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-medium">{feedback.name}</p>
@@ -1638,118 +1652,20 @@ const AdminPanel = () => {
                         </div>
                       </div>
                     ))}
-                    {feedbacks.length === 0 && (
-                      <p className="text-center text-gray-500 py-8">No website feedbacks yet.</p>
-                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Website Inquiries */}
-              <Card>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle>Website Inquiries</CardTitle>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleWebsiteInquiriesSort("name")}
-                        className="flex items-center gap-1"
-                      >
-                        Name
-                        {getSortIcon("name", websiteInquiriesSortBy, websiteInquiriesSortOrder)}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleWebsiteInquiriesSort("service")}
-                        className="flex items-center gap-1"
-                      >
-                        Service
-                        {getSortIcon("service", websiteInquiriesSortBy, websiteInquiriesSortOrder)}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleWebsiteInquiriesSort("date")}
-                        className="flex items-center gap-1"
-                      >
-                        Date
-                        {getSortIcon("date", websiteInquiriesSortBy, websiteInquiriesSortOrder)}
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {sortBookings(filteredBookings, websiteInquiriesSortBy, websiteInquiriesSortOrder).slice(0, 5).map((booking) => (
-                      <div key={booking.id} className="p-3 border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="font-medium">{booking.name}</p>
-                          <Badge variant={booking.status === "pending" ? "secondary" : "default"}>
-                            {booking.status}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-gray-600">{booking.service}</p>
-                        <p className="text-xs text-gray-500">
-                          {booking.createdAt?.toDate?.() ? 
-                            new Date(booking.createdAt.toDate()).toLocaleDateString() : 
-                            new Date(booking.timestamp).toLocaleDateString()
-                          }
-                        </p>
-                        {booking.message && (
-                          <p className="text-sm text-gray-600 mt-2 italic">"{booking.message}"</p>
-                        )}
-                        <div className="flex gap-2 mt-3">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
-                              // Convert to client logic here
-                              toast({
-                                title: "Convert to Client",
-                                description: "This inquiry will be converted to a client.",
-                              });
-                            }}
-                          >
-                            Convert to Client
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                    {filteredBookings.length === 0 && (
-                      <p className="text-center text-gray-500 py-8">No inquiries yet.</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                          </div>
 
-            {/* Services and Reels Posting */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Services Posting</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-gray-600 mb-4">Manage and update services displayed on the website</p>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Active Services</p>
-                        <p className="text-sm text-gray-500">{services.length} services currently live</p>
-                      </div>
-                      <Button variant="outline" size="sm">Manage</Button>
-                    </div>
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Featured Services</p>
-                        <p className="text-sm text-gray-500">Highlight premium services</p>
-                      </div>
-                      <Button variant="outline" size="sm">Configure</Button>
-                    </div>
-                  </div>
+                  <p className="text-gray-600">Manage and update services displayed on the website</p>
+                  <Button className="mt-4">Manage Services</Button>
                 </CardContent>
               </Card>
 
@@ -1758,23 +1674,8 @@ const AdminPanel = () => {
                   <CardTitle>Reels Posting</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-gray-600 mb-4">Manage Instagram reels and social media content</p>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Recent Reels</p>
-                        <p className="text-sm text-gray-500">5 reels this month</p>
-                      </div>
-                      <Button variant="outline" size="sm">View All</Button>
-                    </div>
-                    <div className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">Schedule Post</p>
-                        <p className="text-sm text-gray-500">Plan upcoming content</p>
-                      </div>
-                      <Button variant="outline" size="sm">Schedule</Button>
-                    </div>
-                  </div>
+                  <p className="text-gray-600">Manage Instagram reels and social media content</p>
+                  <Button className="mt-4">Manage Reels</Button>
                 </CardContent>
               </Card>
             </div>
