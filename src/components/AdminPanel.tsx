@@ -1486,67 +1486,52 @@ const AdminPanel = () => {
 
           {/* Website Tab */}
           <TabsContent value="website" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Website Feedbacks</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {feedbacks.slice(0, 3).map((feedback) => (
-                      <div key={feedback.id} className="p-3 border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="font-medium">{feedback.name}</p>
-                          <div className="flex">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`h-4 w-4 ${
-                                  i < feedback.rating ? "text-yellow-400 fill-current" : "text-gray-300"
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-600">{feedback.whatYouLike}</p>
-                        {feedback.whatWeCanImprove && (
-                          <div className="mt-2 p-2 bg-blue-50 rounded">
-                            <p className="text-sm font-medium text-blue-800">Suggestion:</p>
-                            <p className="text-sm text-gray-700">{feedback.whatWeCanImprove}</p>
-                          </div>
-                        )}
-                        <div className="text-xs text-gray-500 mt-2">
-                          {feedback.createdAt ? new Date(feedback.createdAt).toLocaleDateString() : new Date(feedback.timestamp).toLocaleDateString()}
+            <Card>
+              <CardHeader>
+                <CardTitle>Website Feedbacks</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {feedbacks.slice(0, 3).map((feedback) => (
+                    <div key={feedback.id} className="p-3 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-medium">{feedback.name}</p>
+                        <div className="flex">
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`h-4 w-4 ${
+                                i < feedback.rating ? "text-yellow-400 fill-current" : "text-gray-300"
+                              }`}
+                            />
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      <p className="text-sm text-gray-600">{feedback.whatYouLike}</p>
+                      {feedback.whatWeCanImprove && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded">
+                          <p className="text-sm font-medium text-blue-800">Suggestion:</p>
+                          <p className="text-sm text-gray-700">{feedback.whatWeCanImprove}</p>
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-2">
+                        {feedback.createdAt ? new Date(feedback.createdAt).toLocaleDateString() : new Date(feedback.timestamp).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
-                          </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Services Posting</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600">Manage and update services displayed on the website</p>
-                  <Button className="mt-4">Manage Services</Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Reels Posting</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600">Manage Instagram reels and social media content</p>
-                  <Button className="mt-4">Manage Reels</Button>
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Reels Posting</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">Manage Instagram reels and social media content</p>
+                <Button className="mt-4">Manage Reels</Button>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Billing Tab */}
