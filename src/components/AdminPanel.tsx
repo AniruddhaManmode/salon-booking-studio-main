@@ -638,20 +638,6 @@ const AdminPanel = () => {
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 bg-green-100 rounded-lg p-3">
-                      <DollarSign className="h-6 w-6 text-green-600" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-500">Revenue</p>
-                      <p className="text-2xl font-semibold text-gray-900">₹{stats.revenue.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center">
                     <div className="flex-shrink-0 bg-yellow-100 rounded-lg p-3">
                       <MessageSquare className="h-6 w-6 text-yellow-600" />
                     </div>
