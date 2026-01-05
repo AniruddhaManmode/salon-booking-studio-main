@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { collection, query, orderBy, onSnapshot, addDoc, doc, getDocs, where } from "firebase/firestore";
 import { db } from "@/firebase";
-import { Search, Plus, CreditCard, MessageSquare, Calendar, DollarSign, User, CheckCircle } from "lucide-react";
+import { Download, FileText, Search, Plus, MessageSquare, Calendar, Phone, Mail, MapPin, CreditCard, CheckCircle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -287,6 +287,147 @@ const BillingSection = () => {
     window.open(whatsappUrl, '_blank');
   };
 
+  const generatePDFBill = async (billingRecord: BillingRecord) => {
+    try {
+      // Dynamic import for jsPDF
+      const jsPDF = (await import('jspdf')).default;
+      
+      const doc = new jsPDF();
+      
+      // Simple clean layout - no complex formatting
+      let yPosition = 20;
+      
+      // Salon Header
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('As Unisex Salon', 105, yPosition, { align: 'center' });
+      
+      yPosition += 10;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Shop No.7, Krushna Anand Complex, Near Tuljabhawani Temple', 105, yPosition, { align: 'center' });
+      
+      yPosition += 6;
+      doc.text('Pipeline Road Sawedi, Ahilyanagar 414003', 105, yPosition, { align: 'center' });
+      
+      yPosition += 6;
+      doc.text('Phone: +91 98765 43210', 105, yPosition, { align: 'center' });
+      
+      yPosition += 15;
+      
+      // Bill Info
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Bill #: ${billingRecord.id.slice(-8).toUpperCase()}`, 20, yPosition);
+      doc.text(`Date: ${new Date(billingRecord.date).toLocaleDateString()}`, 120, yPosition);
+      
+      yPosition += 10;
+      doc.text(`Status: ${billingRecord.status.toUpperCase()}`, 20, yPosition);
+      
+      yPosition += 15;
+      
+      // Client Info
+      doc.setFont('helvetica', 'bold');
+      doc.text('Client Details:', 20, yPosition);
+      
+      yPosition += 8;
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Name: ${billingRecord.clientName}`, 20, yPosition);
+      
+      yPosition += 6;
+      doc.text(`Contact: ${billingRecord.clientContact}`, 20, yPosition);
+      
+      yPosition += 6;
+      doc.text(`Staff: ${billingRecord.staff}`, 20, yPosition);
+      
+      yPosition += 6;
+      doc.text(`Payment: ${billingRecord.paymentMode}`, 20, yPosition);
+      
+      yPosition += 15;
+      
+      // Services Header
+      doc.setFont('helvetica', 'bold');
+      doc.text('Services:', 20, yPosition);
+      
+      yPosition += 8;
+      
+      // Table Headers
+      doc.text('Service', 20, yPosition);
+      doc.text('Rate', 80, yPosition);
+      doc.text('Qty', 120, yPosition);
+      doc.text('Total', 150, yPosition);
+      
+      yPosition += 5;
+      
+      // Line under headers
+      doc.line(20, yPosition, 180, yPosition);
+      yPosition += 8;
+      
+      // Services List
+      doc.setFont('helvetica', 'normal');
+      billingRecord.items.forEach((item) => {
+        const serviceName = item.service || 'Service';
+        const rate = Number(item.rate) || 0;
+        const quantity = Number(item.quantity) || 1;
+        const total = Number(item.total) || (rate * quantity);
+        
+        // Convert to plain strings - no formatting issues
+        const rateStr = String(Math.round(rate));
+        const quantityStr = String(Math.round(quantity));
+        const totalStr = String(Math.round(total));
+        
+        doc.text(serviceName, 20, yPosition);
+        doc.text('Rs. ' + rateStr, 80, yPosition);
+        doc.text(quantityStr, 120, yPosition);
+        doc.text('Rs. ' + totalStr, 150, yPosition);
+        
+        yPosition += 6;
+      });
+      
+      // Line after services
+      yPosition += 2;
+      doc.line(20, yPosition, 180, yPosition);
+      
+      yPosition += 10;
+      
+      // Total
+      doc.setFont('helvetica', 'bold');
+      doc.text('Total Amount:', 120, yPosition);
+      
+      const totalAmount = Number(billingRecord.totalAmount) || 0;
+      const totalAmountStr = String(Math.round(totalAmount));
+      
+      doc.setFontSize(14);
+      doc.text('Rs. ' + totalAmountStr, 150, yPosition);
+      
+      yPosition += 20;
+      
+      // Footer
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'italic');
+      doc.text('Thank you for visiting As Unisex Salon!', 105, yPosition, { align: 'center' });
+      
+      yPosition += 6;
+      doc.text('Please visit again', 105, yPosition, { align: 'center' });
+      
+      // Save the PDF
+      const fileName = `AsUnisexSalon_Bill_${billingRecord.clientName.replace(/\s+/g, '_')}_${billingRecord.date}.pdf`;
+      doc.save(fileName);
+      
+      toast({
+        title: "PDF Generated Successfully",
+        description: `Bill generated for ${billingRecord.clientName}`,
+      });
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredRecords = billingRecords.filter(record =>
     record.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     record.clientContact.includes(searchTerm) ||
@@ -545,14 +686,24 @@ const BillingSection = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => requestReview(record)}
-                      >
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Request Review
-                      </Button>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => generatePDFBill(record)}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          PDF Bill
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => requestReview(record)}
+                        >
+                          <MessageSquare className="h-4 w-4 mr-2" />
+                          Request Review
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
