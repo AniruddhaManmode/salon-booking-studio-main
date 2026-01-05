@@ -165,11 +165,11 @@ const AdminPanel = () => {
     lowStockProducts: products.filter(p => p.quantity < 5).length
   };
 
-  // Calculate Client Happiness Index
+  // Calculate Client Happiness Index based on feedback ratings
   const calculateHappinessIndex = () => {
-    if (reviews.length === 0) return 0;
-    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-    const averageRating = totalRating / reviews.length;
+    if (feedbacks.length === 0) return 0;
+    const totalRating = feedbacks.reduce((sum, feedback) => sum + feedback.rating, 0);
+    const averageRating = totalRating / feedbacks.length;
     return Math.round((averageRating / 5) * 100);
   };
 
@@ -523,8 +523,22 @@ const AdminPanel = () => {
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
+                    <div className="flex-shrink-0 bg-green-100 rounded-lg p-3">
+                      <Star className="h-6 w-6 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-500">Client Happiness</p>
+                      <p className="text-2xl font-semibold text-gray-900">{happinessIndex}%</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
                     <div className="flex-shrink-0 bg-purple-100 rounded-lg p-3">
-                      <Star className="h-6 w-6 text-purple-600" />
+                      <MessageSquare className="h-6 w-6 text-purple-600" />
                     </div>
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-500">Feedbacks</p>
@@ -535,13 +549,13 @@ const AdminPanel = () => {
               </Card>
             </div>
 
-            {/* Client Happiness Index */}
+            {/* Client Happiness Index Details */}
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Client Happiness Index</h3>
-                    <p className="text-sm text-gray-500">Based on {reviews.length} reviews</p>
+                    <p className="text-sm text-gray-500">Based on {feedbacks.length} feedback ratings</p>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-green-600">{happinessIndex}%</div>
