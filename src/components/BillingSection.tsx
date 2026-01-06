@@ -282,7 +282,9 @@ const BillingSection = () => {
   };
 
   const requestReview = (billingRecord: BillingRecord) => {
-    const message = `Hi ${billingRecord.clientName}! Thank you for visiting our salon. We'd love to hear about your experience. Please leave us a review!`;
+    const feedbackLink = `${window.location.origin}/feedback?name=${encodeURIComponent(billingRecord.clientName)}&contact=${encodeURIComponent(billingRecord.clientContact)}&service=${encodeURIComponent(billingRecord.items.map(item => item.service).join(', '))}`;
+    
+    const message = `Hi ${billingRecord.clientName}! Thank you for visiting our salon. We'd love to hear about your experience. Please leave us a review here: ${feedbackLink}`;
     const whatsappUrl = `https://wa.me/${billingRecord.clientContact.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
   };

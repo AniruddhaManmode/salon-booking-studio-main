@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Phone, Mail, Calendar, Clock, CheckCircle, XCircle, Trash2, Search, Filter,
   Users, DollarSign, MessageSquare, Star, TrendingUp, Plus, Edit2, Eye,
-  Package, CreditCard, AlertTriangle, BarChart3, PieChart, Activity, ArrowUpDown
+  Package, CreditCard, AlertTriangle, BarChart3, PieChart, Activity, ArrowUpDown, ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,7 @@ const AdminPanel = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [websiteFeedbacks, setWebsiteFeedbacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [timeRange, setTimeRange] = useState("7d");
@@ -42,6 +43,8 @@ const AdminPanel = () => {
   const [inquiriesSortOrder, setInquiriesSortOrder] = useState<"asc" | "desc">("desc");
   const [websiteInquiriesSortBy, setWebsiteInquiriesSortBy] = useState<"name" | "service" | "date">("date");
   const [websiteInquiriesSortOrder, setWebsiteInquiriesSortOrder] = useState<"asc" | "desc">("desc");
+  const [websiteFeedbacksSortBy, setWebsiteFeedbacksSortBy] = useState<"date" | "rating" | "name">("date");
+  const [websiteFeedbacksSortOrder, setWebsiteFeedbacksSortOrder] = useState<"asc" | "desc">("desc");
 
   // Sorting and searching states for clients
   const [clientsSortBy, setClientsSortBy] = useState<"name" | "phone" | "visits" | "lastVisit">("name");
@@ -140,6 +143,14 @@ const AdminPanel = () => {
           createdAt: doc.data().createdAt || null
         }));
         setFeedbacks(feedbacksData);
+
+        // Fetch website feedbacks
+        const websiteFeedbacksSnapshot = await getDocs(collection(db, "websiteFeedbacks"));
+        const websiteFeedbacksData = websiteFeedbacksSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setWebsiteFeedbacks(websiteFeedbacksData);
 
         setLoading(false);
         return () => {
@@ -425,6 +436,39 @@ const AdminPanel = () => {
       setInquiriesSortBy(field);
       setInquiriesSortOrder("asc");
     }
+  };
+
+  // Sorting functions for website feedbacks
+  const handleWebsiteFeedbacksSort = (field: "date" | "rating" | "name") => {
+    if (websiteFeedbacksSortBy === field) {
+      setWebsiteFeedbacksSortOrder(websiteFeedbacksSortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setWebsiteFeedbacksSortBy(field);
+      setWebsiteFeedbacksSortOrder("asc");
+    }
+  };
+
+  // Generic sorting function
+  const sortWebsiteFeedbacks = (feedbacks: any[], sortBy: "date" | "rating" | "name", order: "asc" | "desc") => {
+    return [...feedbacks].sort((a, b) => {
+      let compareValue = 0;
+      
+      switch (sortBy) {
+        case "date":
+          const dateA = a.createdAt?.toDate?.() || new Date(a.date);
+          const dateB = b.createdAt?.toDate?.() || new Date(b.date);
+          compareValue = dateA.getTime() - dateB.getTime();
+          break;
+        case "rating":
+          compareValue = (a.rating || 0) - (b.rating || 0);
+          break;
+        case "name":
+          compareValue = (a.clientName || '').localeCompare(b.clientName || '');
+          break;
+      }
+      
+      return order === "asc" ? compareValue : -compareValue;
+    });
   };
 
   const handleWebsiteInquiriesSort = (field: "name" | "service" | "date") => {
@@ -1607,37 +1651,106 @@ const AdminPanel = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Website Feedbacks</CardTitle>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      Website Feedbacks
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleWebsiteFeedbacksSort("date")}
+                          className="flex items-center gap-1"
+                        >
+                          Date
+                          {getSortIcon("date", websiteFeedbacksSortBy, websiteFeedbacksSortOrder)}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleWebsiteFeedbacksSort("rating")}
+                          className="flex items-center gap-1"
+                        >
+                          Rating
+                          {getSortIcon("rating", websiteFeedbacksSortBy, websiteFeedbacksSortOrder)}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleWebsiteFeedbacksSort("name")}
+                          className="flex items-center gap-1"
+                        >
+                          Name
+                          {getSortIcon("name", websiteFeedbacksSortBy, websiteFeedbacksSortOrder)}
+                        </Button>
+                      </div>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => window.open('/feedback', '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Feedback Form
+                    </Button>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {feedbacks.slice(0, 3).map((feedback) => (
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {sortWebsiteFeedbacks(websiteFeedbacks, websiteFeedbacksSortBy, websiteFeedbacksSortOrder).slice(0, 5).map((feedback) => (
                       <div key={feedback.id} className="p-3 border rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="font-medium">{feedback.name}</p>
-                          <div className="flex">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`h-4 w-4 ${
-                                  i < feedback.rating ? "text-yellow-400 fill-current" : "text-gray-300"
-                                }`}
-                              />
-                            ))}
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{feedback.clientName || "Anonymous"}</p>
+                            {feedback.isHappy !== undefined && (
+                              <Badge variant={feedback.isHappy ? "default" : "secondary"}>
+                                {feedback.isHappy ? "😊 Happy" : "😞 Not Happy"}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {feedback.rating > 0 && (
+                              <div className="flex">
+                                {[...Array(5)].map((_, i) => (
+                                  <Star
+                                    key={i}
+                                    className={`h-4 w-4 ${
+                                      i < feedback.rating ? "text-yellow-400 fill-current" : "text-gray-300"
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            <span className="text-xs text-gray-500">
+                              {feedback.createdAt?.toDate?.() ? 
+                                feedback.createdAt.toDate().toLocaleDateString() : 
+                                new Date(feedback.date).toLocaleDateString()
+                              }
+                            </span>
                           </div>
                         </div>
-                        <p className="text-sm text-gray-600">{feedback.whatYouLike}</p>
-                        {feedback.whatWeCanImprove && (
-                          <div className="mt-2 p-2 bg-blue-50 rounded">
-                            <p className="text-sm font-medium text-blue-800">Suggestion:</p>
-                            <p className="text-sm text-gray-700">{feedback.whatWeCanImprove}</p>
+                        
+                        {feedback.isHappy && feedback.compliment && (
+                          <div className="mb-2">
+                            <p className="text-sm font-medium text-green-700">What they liked:</p>
+                            <p className="text-sm text-gray-600">{feedback.compliment}</p>
                           </div>
                         )}
-                        <div className="text-xs text-gray-500 mt-2">
-                          {feedback.createdAt ? new Date(feedback.createdAt).toLocaleDateString() : new Date(feedback.timestamp).toLocaleDateString()}
-                        </div>
+                        
+                        {feedback.suggestions && (
+                          <div className="mb-2 p-2 bg-blue-50 rounded">
+                            <p className="text-sm font-medium text-blue-800">Suggestions:</p>
+                            <p className="text-sm text-gray-700">{feedback.suggestions}</p>
+                          </div>
+                        )}
+                        
+                        {feedback.serviceName && (
+                          <p className="text-xs text-gray-500">Service: {feedback.serviceName}</p>
+                        )}
                       </div>
                     ))}
+                    {websiteFeedbacks.length === 0 && (
+                      <p className="text-center text-gray-500 py-8">No website feedbacks yet.</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>

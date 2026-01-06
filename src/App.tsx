@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import FeedbackPage from "./pages/FeedbackPage";
 import OwnerDashboard from "./components/OwnerDashboard";
 import AdminPanel from "./components/AdminPanel";
 import Revenue from "./components/Revenue";
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="/dashboard" element={<OwnerDashboard />} />
             <Route path="/revenue" element={<Revenue />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

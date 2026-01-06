@@ -49,5 +49,10 @@ service cloud.firestore {
     match /billing/{documentId} {
       allow read, write: if request.time < timestamp.date(2026, 12, 31);
     }
+    
+    // Website Feedbacks collection
+    match /websiteFeedbacks/{documentId} {
+      allow read, write: if request.time < timestamp.date(2026, 12, 31);
+    }
   }
 }
