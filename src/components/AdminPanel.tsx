@@ -35,6 +35,7 @@ const AdminPanel = () => {
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [websiteFeedbacks, setWebsiteFeedbacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [billingRecords, setBillingRecords] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [timeRange, setTimeRange] = useState("7d");
   
@@ -47,7 +48,7 @@ const AdminPanel = () => {
   const [websiteFeedbacksSortOrder, setWebsiteFeedbacksSortOrder] = useState<"asc" | "desc">("desc");
 
   // Sorting and searching states for clients
-  const [clientsSortBy, setClientsSortBy] = useState<"name" | "phone" | "visits" | "lastVisit">("name");
+  const [clientsSortBy, setClientsSortBy] = useState<"name" | "phone" | "visits" | "lastVisit" | "spending">("name");
   const [clientsSortOrder, setClientsSortOrder] = useState<"asc" | "desc">("asc");
   const [historySortBy, setHistorySortBy] = useState<"date" | "service" | "amount" | "staff">("date");
   const [historySortOrder, setHistorySortOrder] = useState<"asc" | "desc">("desc");
@@ -151,6 +152,14 @@ const AdminPanel = () => {
           ...doc.data()
         }));
         setWebsiteFeedbacks(websiteFeedbacksData);
+
+        // Fetch billing records for client history
+        const billingSnapshot = await getDocs(collection(db, "billing"));
+        const billingData = billingSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setBillingRecords(billingData);
 
         setLoading(false);
         return () => {
@@ -526,7 +535,7 @@ const AdminPanel = () => {
   };
 
   // Sorting functions for clients
-  const handleClientsSort = (field: "name" | "phone" | "visits" | "lastVisit") => {
+  const handleClientsSort = (field: "name" | "phone" | "visits" | "lastVisit" | "spending") => {
     if (clientsSortBy === field) {
       setClientsSortOrder(clientsSortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -570,6 +579,9 @@ const AdminPanel = () => {
           const lastA = a.sortedHistory.length > 0 ? Math.max(...a.sortedHistory.map((s: any) => new Date(s.completedAt).getTime())) : 0;
           const lastB = b.sortedHistory.length > 0 ? Math.max(...b.sortedHistory.map((s: any) => new Date(s.completedAt).getTime())) : 0;
           return sortOrder === "asc" ? lastA - lastB : lastB - lastA;
+        
+        case "spending":
+          return sortOrder === "asc" ? a.totalSpending - b.totalSpending : b.totalSpending - a.totalSpending;
         
         default:
           return 0;
@@ -938,14 +950,21 @@ const AdminPanel = () => {
                 Last Visit
                 {getSortIcon("lastVisit", clientsSortBy, clientsSortOrder)}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleClientsSort("spending")}
+                className="flex items-center gap-1"
+              >
+                Spending
+                {getSortIcon("spending", clientsSortBy, clientsSortOrder)}
+              </Button>
             </div>
-
-            {/* Client Rows */}
             <Card>
               <CardContent className="p-0">
                 {(() => {
-                  // Group clients by normalized phone number
-                  const normalizePhone = (phone: string) => phone.replace(/\+91|\s|-/g, '').trim();
+                  // Group clients by normalized phone number and calculate billing stats
+                  const normalizePhone = (phone: string) => phone ? phone.replace(/\+91|\s|-/g, '').trim() : '';
                   
                   const groupedClients = clients.reduce((groups, client) => {
                     const normalizedPhone = normalizePhone(client.contact);
@@ -954,7 +973,10 @@ const AdminPanel = () => {
                         normalizedPhone,
                         clients: [],
                         allServiceHistory: [],
-                        allAllergies: new Set()
+                        allAllergies: new Set(),
+                        billingRecords: [],
+                        totalSpending: 0,
+                        visitCount: 0
                       };
                     }
                     groups[normalizedPhone].clients.push(client);
@@ -975,7 +997,20 @@ const AdminPanel = () => {
                     clients: typeof clients;
                     allServiceHistory: any[];
                     allAllergies: Set<string>;
+                    billingRecords: any[];
+                    totalSpending: number;
+                    visitCount: number;
                   }>);
+
+                  // Add billing records to client groups
+                  billingRecords.forEach(billing => {
+                    const normalizedPhone = normalizePhone(billing.clientContact);
+                    if (groupedClients[normalizedPhone]) {
+                      groupedClients[normalizedPhone].billingRecords.push(billing);
+                      groupedClients[normalizedPhone].totalSpending += billing.totalAmount || 0;
+                      groupedClients[normalizedPhone].visitCount += 1;
+                    }
+                  });
 
                   // Filter and sort grouped clients
                   const filteredGroups = Object.values(groupedClients)
@@ -989,247 +1024,200 @@ const AdminPanel = () => {
                         group.normalizedPhone.includes(normalizedSearchTerm)
                       );
                     })
-                    .map(group => {
-                      // Use the most recent client's name as the display name
-                      const primaryClient = group.clients.reduce((latest, client) => {
-                        const latestDate = new Date(latest.updatedAt || latest.createdAt).getTime();
-                        const clientDate = new Date(client.updatedAt || client.createdAt).getTime();
-                        return clientDate > latestDate ? client : latest;
-                      });
-
-                      // Sort service history by date (newest first)
-                      const sortedHistory = group.allServiceHistory
-                        .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
-
-                      return {
-                        ...group,
-                        primaryClient,
-                        sortedHistory
-                      };
+                    .sort((a, b) => {
+                      let compareValue = 0;
+                      
+                      switch (clientsSortBy) {
+                        case "name":
+                          compareValue = (a.clients[0]?.name || '').localeCompare(b.clients[0]?.name || '');
+                          break;
+                        case "phone":
+                          compareValue = a.normalizedPhone.localeCompare(b.normalizedPhone);
+                          break;
+                        case "visits":
+                          compareValue = a.visitCount - b.visitCount;
+                          break;
+                        case "lastVisit":
+                          const aLastVisit = Math.max(...a.billingRecords.map(r => new Date(r.date).getTime()));
+                          const bLastVisit = Math.max(...b.billingRecords.map(r => new Date(r.date).getTime()));
+                          compareValue = aLastVisit - bLastVisit;
+                          break;
+                        case "spending":
+                          compareValue = a.totalSpending - b.totalSpending;
+                          break;
+                      }
+                      
+                      return clientsSortOrder === "asc" ? compareValue : -compareValue;
                     });
 
-                  const sortedGroups = sortClients(filteredGroups, clientsSortBy, clientsSortOrder);
+                  return filteredGroups.map((group, index) => {
+                    const primaryClient = group.clients[0];
+                    const lastVisit = group.billingRecords.length > 0 
+                      ? new Date(Math.max(...group.billingRecords.map(r => new Date(r.date))))
+                      : null;
 
-                  return sortedGroups.length > 0 ? (
-                    <div className="divide-y">
-                      {sortedGroups.map((group) => (
-                        <div
-                          key={group.normalizedPhone}
-                          className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                          onClick={() => {
-                            setSelectedClientForModal(group);
-                            setShowClientDetailsModal(true);
-                            setHistorySearchTerm("");
-                          }}
-                        >
+                    return (
+                      <div key={group.normalizedPhone} className="border-b hover:bg-gray-50 transition-colors">
+                        <div className="p-4">
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
-                              <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-3">
                                 <div>
-                                  <h3 className="font-semibold text-lg text-gray-900">{group.primaryClient.name}</h3>
-                                  <p className="text-sm text-gray-600 flex items-center mt-1">
-                                    <Phone className="w-4 h-4 mr-1" />
-                                    {group.primaryClient.contact}
-                                  </p>
+                                  <h3 className="font-semibold text-lg">{primaryClient.name}</h3>
+                                  <p className="text-gray-600">{primaryClient.contact}</p>
                                 </div>
-                                {group.clients.length > 1 && (
-                                  <Badge variant="outline" className="text-blue-600">
-                                    {group.clients.length} entries merged
+                                
+                                {/* Stats Badges */}
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                                    Visits: {group.visitCount}
                                   </Badge>
-                                )}
-                                {group.allAllergies.size > 0 && (
-                                  <Badge variant="outline" className="text-yellow-600">
-                                    Allergies: {Array.from(group.allAllergies).join(", ")}
+                                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                    Spent: ₹{group.totalSpending.toFixed(0)}
                                   </Badge>
-                                )}
+                                  {lastVisit && (
+                                    <Badge variant="outline">
+                                      Last: {lastVisit.toLocaleDateString()}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
+                              
+                              {group.allAllergies.size > 0 && (
+                                <div className="mt-2">
+                                  <span className="text-sm font-medium text-red-600">Allergies: </span>
+                                  <span className="text-sm text-gray-600">
+                                    {Array.from(group.allAllergies).join(", ")}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-right">
-                                <p className="text-sm font-medium text-gray-900">{group.sortedHistory.length} Visits</p>
-                                <p className="text-xs text-gray-500">
-                                  {group.sortedHistory.length > 0 
-                                    ? `Last: ${new Date(group.sortedHistory[0].completedAt).toLocaleDateString()}`
-                                    : "No visits"
-                                  }
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-semibold text-green-600">
-                                  ₹{group.sortedHistory.reduce((total, service) => total + service.amount, 0)}
-                                </p>
-                                <p className="text-xs text-gray-500">Total spent</p>
-                              </div>
-                              <ArrowUpDown className="h-4 w-4 text-gray-400" />
+                            
+                            <div className="flex items-center gap-2">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    View History
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                                  <DialogHeader>
+                                    <DialogTitle>Client History</DialogTitle>
+                                    <div className="flex items-center gap-2">
+                                      <Label className="text-sm font-medium">View Size:</Label>
+                                      <Select value={clientHistorySize} onValueChange={(value: "small" | "large") => setClientHistorySize(value)}>
+                                        <SelectTrigger className="w-24">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="small">Small</SelectItem>
+                                          <SelectItem value="large">Large</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </DialogHeader>
+                                  {primaryClient && (
+                                    <Tabs defaultValue="info" className="w-full">
+                                      <TabsList className="grid w-full grid-cols-2">
+                                        <TabsTrigger value="info">Customer Info</TabsTrigger>
+                                        <TabsTrigger value="history">Service History</TabsTrigger>
+                                      </TabsList>
+                                      
+                                      <TabsContent value="info" className="space-y-4 mt-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                          <div>
+                                            <Label className="text-sm font-medium">Name</Label>
+                                            <p className="text-lg font-semibold">{primaryClient.name}</p>
+                                          </div>
+                                          <div>
+                                            <Label className="text-sm font-medium">Contact</Label>
+                                            <p className="text-lg">{primaryClient.contact}</p>
+                                          </div>
+                                          <div>
+                                            <Label className="text-sm font-medium">Total Visits</Label>
+                                            <p className="text-lg font-semibold text-blue-600">{group.visitCount}</p>
+                                          </div>
+                                          <div>
+                                            <Label className="text-sm font-medium">Total Spending</Label>
+                                            <p className="text-lg font-semibold text-green-600">₹{group.totalSpending.toFixed(0)}</p>
+                                          </div>
+                                          {lastVisit && (
+                                            <div className="md:col-span-2">
+                                              <Label className="text-sm font-medium">Last Visit</Label>
+                                              <p className="text-lg">{lastVisit.toLocaleDateString()}</p>
+                                            </div>
+                                          )}
+                                          {group.allAllergies.size > 0 && (
+                                            <div className="md:col-span-2">
+                                              <Label className="text-sm font-medium">Allergies</Label>
+                                              <p className="text-red-600">{Array.from(group.allAllergies).join(", ")}</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </TabsContent>
+                                      
+                                      <TabsContent value="history" className="mt-6">
+                                        <div className="overflow-x-auto">
+                                          <table className="min-w-full divide-y divide-gray-200">
+                                            <thead className="bg-gray-50">
+                                              <tr>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Staff</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Services</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                              {group.billingRecords
+                                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                                .map((record) => (
+                                                  <tr key={record.id} className="hover:bg-gray-50">
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                      {new Date(record.date).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                      {record.staff}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                      <div className="max-w-xs">
+                                                        {record.items?.map((item: any) => item.service).join(", ")}
+                                                      </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap font-medium">
+                                                      ₹{record.totalAmount || 0}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                      <Badge variant="outline">
+                                                        {record.paymentMode}
+                                                      </Badge>
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              {group.billingRecords.length === 0 && (
+                                                <tr>
+                                                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                                    No billing records found
+                                                  </td>
+                                                </tr>
+                                              )}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </TabsContent>
+                                    </Tabs>
+                                  )}
+                                </DialogContent>
+                              </Dialog>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center">
-                      <p className="text-gray-500">
-                        {clientSearchTerm ? "No clients found matching your search." : "No clients found. Complete some services to see client history here."}
-                      </p>
-                    </div>
-                  );
+                      </div>
+                    );
+                  });
                 })()}
               </CardContent>
             </Card>
-
-            {/* Client Details Modal */}
-            <Dialog open={showClientDetailsModal} onOpenChange={setShowClientDetailsModal}>
-              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Client Details - {selectedClientForModal?.primaryClient?.name}
-                  </DialogTitle>
-                </DialogHeader>
-                
-                {selectedClientForModal && (
-                  <div className="space-y-6">
-                    {/* Client Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Name</p>
-                        <p className="font-semibold">{selectedClientForModal.primaryClient.name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Phone</p>
-                        <p className="font-semibold">{selectedClientForModal.primaryClient.contact}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Total Visits</p>
-                        <p className="font-semibold">{selectedClientForModal.sortedHistory.length}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Total Spent</p>
-                        <p className="font-semibold text-green-600">
-                          ₹{selectedClientForModal.sortedHistory.reduce((total, service) => total + service.amount, 0)}
-                        </p>
-                      </div>
-                      {selectedClientForModal.allAllergies.size > 0 && (
-                        <div className="md:col-span-2">
-                          <p className="text-sm font-medium text-gray-700">Allergies</p>
-                          <p className="text-sm text-yellow-600">{Array.from(selectedClientForModal.allAllergies).join(", ")}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Service History Search and Sort */}
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-semibold text-gray-900">Service History</h3>
-                      <div className="flex items-center space-x-2">
-                        <Search className="h-4 w-4 text-gray-400" />
-                        <Input
-                          placeholder="Search services..."
-                          value={historySearchTerm}
-                          onChange={(e) => setHistorySearchTerm(e.target.value)}
-                          className="w-48"
-                        />
-                      </div>
-                    </div>
-
-                    {/* History Sorting Controls */}
-                    <div className="flex items-center gap-2 bg-white p-3 rounded-lg border">
-                      <span className="text-sm font-medium text-gray-700">Sort by:</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleHistorySort("date")}
-                        className="flex items-center gap-1"
-                      >
-                        Date
-                        {getSortIcon("date", historySortBy, historySortOrder)}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleHistorySort("service")}
-                        className="flex items-center gap-1"
-                      >
-                        Service
-                        {getSortIcon("service", historySortBy, historySortOrder)}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleHistorySort("amount")}
-                        className="flex items-center gap-1"
-                      >
-                        Amount
-                        {getSortIcon("amount", historySortBy, historySortOrder)}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleHistorySort("staff")}
-                        className="flex items-center gap-1"
-                      >
-                        Staff
-                        {getSortIcon("staff", historySortBy, historySortOrder)}
-                      </Button>
-                    </div>
-
-                    {/* Service History Table */}
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Services</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {(() => {
-                            const filteredHistory = selectedClientForModal.sortedHistory.filter(service => 
-                              service.services.some((s: string) => 
-                                s.toLowerCase().includes(historySearchTerm.toLowerCase())
-                              ) ||
-                              (service.staff && service.staff.toLowerCase().includes(historySearchTerm.toLowerCase()))
-                            );
-                            
-                            const sortedHistory = sortHistory(filteredHistory, historySortBy, historySortOrder);
-                            
-                            return sortedHistory.length > 0 ? (
-                              sortedHistory.map((service, index) => (
-                                <tr key={index} className="hover:bg-gray-50">
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {new Date(service.date).toLocaleDateString()}
-                                  </td>
-                                  <td className="px-4 py-4 text-sm text-gray-900">
-                                    {service.services.join(" + ")}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {service.staff || "N/A"}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                                    ₹{service.amount}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {service.paymentMode}
-                                  </td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr>
-                                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
-                                  {historySearchTerm ? "No services found matching your search." : "No service history available."}
-                                </td>
-                              </tr>
-                            );
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </DialogContent>
-            </Dialog>
           </TabsContent>
 
           {/* Staff Tab */}
@@ -1648,8 +1636,8 @@ const AdminPanel = () => {
 
           {/* Website Tab */}
           <TabsContent value="website" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card className="lg:col-span-2">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1755,7 +1743,15 @@ const AdminPanel = () => {
                 </CardContent>
               </Card>
 
-                          </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Today's Clients</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <TodaysClients />
+                </CardContent>
+              </Card>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card>

@@ -39,8 +39,12 @@ const BillingSection = () => {
   const [services, setServices] = useState<any[]>([]);
   const [completedBookings, setCompletedBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clients, setClients] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showNewBilling, setShowNewBilling] = useState(false);
+  const [clientSearchTerm, setClientSearchTerm] = useState("");
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
 
   // New billing form state
   const [newBilling, setNewBilling] = useState({
@@ -54,50 +58,54 @@ const BillingSection = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch staff first
-        const staffSnapshot = await getDocs(collection(db, "staff"));
-        const staffData = staffSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setStaff(staffData);
-
-        // Fetch services
-        const servicesSnapshot = await getDocs(collection(db, "services"));
-        const servicesData = servicesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setServices(servicesData);
-
-        // Fetch billing records with real-time updates
-        const billingQuery = query(collection(db, "billing"), orderBy("createdAt", "desc"));
-        const unsubscribeBilling = onSnapshot(billingQuery, (snapshot) => {
+        const unsubscribeBilling = onSnapshot(collection(db, "billing"), (snapshot) => {
           const billingData = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
-          } as BillingRecord));
-          setBillingRecords(billingData);
+          }));
+          setBillingRecords(billingData as BillingRecord[]);
         });
 
-        // Fetch completed bookings with real-time updates
-        const bookingsQuery = query(
-          collection(db, "bookings"), 
-          where("status", "==", "completed"),
-          orderBy("completedAt", "desc")
-        );
-        const unsubscribeBookings = onSnapshot(bookingsQuery, (snapshot) => {
+        const unsubscribeStaff = onSnapshot(collection(db, "staff"), (snapshot) => {
+          const staffData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setStaff(staffData);
+        });
+
+        const unsubscribeServices = onSnapshot(collection(db, "services"), (snapshot) => {
+          const servicesData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setServices(servicesData);
+        });
+
+        const unsubscribeClients = onSnapshot(collection(db, "clients"), (snapshot) => {
+          const clientsData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setClients(clientsData);
+        });
+
+        const unsubscribeBookings = onSnapshot(collection(db, "bookings"), (snapshot) => {
           const bookingsData = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
           }));
-          setCompletedBookings(bookingsData);
+          const completed = bookingsData.filter((booking: any) => booking.status === "completed");
+          setCompletedBookings(completed);
         });
 
         setLoading(false);
-        
+
         return () => {
           unsubscribeBilling();
+          unsubscribeStaff();
+          unsubscribeServices();
+          unsubscribeClients();
           unsubscribeBookings();
         };
       } catch (error) {
@@ -109,62 +117,68 @@ const BillingSection = () => {
     fetchData();
   }, []);
 
-  // Separate effect to handle auto-creation of billing records
-  useEffect(() => {
-    if (completedBookings.length > 0 && billingRecords.length >= 0 && services.length > 0) {
-      completedBookings.forEach(booking => {
-        const existingBilling = billingRecords.find(
-          record => record.clientContact === booking.phone && record.date === booking.date
-        );
-        
-        if (!existingBilling) {
-          createBillingFromCompletedBooking(booking);
-        }
-      });
-    }
-  }, [completedBookings, billingRecords, services]);
-
-  const createBillingFromCompletedBooking = async (booking: any) => {
-    try {
-      // Create billing items from services
-      const servicesList = booking.services || [booking.service];
-      const billingItems = servicesList.map((serviceName: string) => {
-        const service = services.find(s => s.name === serviceName);
-        const rate = booking.amount || (service?.secretPrice || 0);
-        return {
-          service: serviceName,
-          rate: rate,
-          quantity: 1,
-          total: rate
-        };
-      });
-
-      // Create billing record
-      const billingRecord = {
-        clientName: booking.name,
-        clientContact: booking.phone,
-        staff: booking.completedBy || booking.staff || "Unknown",
-        paymentMode: booking.paymentMode || "cash",
-        items: billingItems,
-        totalAmount: booking.amount || billingItems.reduce((sum: number, item: any) => sum + item.total, 0),
-        date: booking.date || new Date().toISOString().split('T')[0],
-        createdAt: new Date(),
-        status: "completed" as const
-      };
-
-      await addDoc(collection(db, "billing"), billingRecord);
-      
-      toast({
-        title: "Billing Record Created",
-        description: `Automatic billing created for ${booking.name}`,
-      });
-    } catch (error) {
-      console.error("Error creating billing from completed booking:", error);
-    }
-  };
+  // Auto-creation of billing records from completed bookings has been removed
+  // useEffect(() => {
+  //   if (completedBookings.length > 0 && billingRecords.length >= 0 && services.length > 0) {
+  //     completedBookings.forEach(booking => {
+  //       const existingBilling = billingRecords.find(
+  //         record => record.clientContact === booking.phone && record.date === booking.date
+  //       );
+  //       
+  //       if (!existingBilling) {
+  //         createBillingFromCompletedBooking(booking);
+  //       }
+  //     });
+  //   }
+  // }, [completedBookings, billingRecords, services]);
 
   const calculateTotal = (items: BillingItem[]) => {
     return items.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+  };
+
+  // Client search and selection functions
+  const filteredClients = clients.filter(client =>
+    client.name?.toLowerCase().includes(clientSearchTerm.toLowerCase()) ||
+    client.phone?.includes(clientSearchTerm)
+  );
+
+  const selectClient = (client: any) => {
+    setSelectedClient(client);
+    setNewBilling(prev => ({
+      ...prev,
+      clientName: client.name,
+      clientContact: client.phone
+    }));
+    setClientSearchTerm("");
+    setShowClientDropdown(false);
+  };
+
+  const clearClientSelection = () => {
+    setSelectedClient(null);
+    setNewBilling(prev => ({
+      ...prev,
+      clientName: "",
+      clientContact: ""
+    }));
+    setClientSearchTerm("");
+  };
+
+  const saveNewClient = async () => {
+    if (newBilling.clientName && newBilling.clientContact) {
+      try {
+        await addDoc(collection(db, "clients"), {
+          name: newBilling.clientName.trim(),
+          phone: newBilling.clientContact.trim(),
+          createdAt: new Date()
+        });
+        toast({
+          title: "Client Saved",
+          description: "New client has been added to the database.",
+        });
+      } catch (error) {
+        console.error("Error saving client:", error);
+      }
+    }
   };
 
   const updateBillingItem = (index: number, field: string, value: any) => {
@@ -218,11 +232,10 @@ const BillingSection = () => {
     }
     
     try {
-      // Test collection access first
-      const testDoc = {
-        test: true,
-        timestamp: new Date()
-      };
+      // Save new client if not exists
+      if (!selectedClient && newBilling.clientName && newBilling.clientContact) {
+        await saveNewClient();
+      }
       
       const totalAmount = calculateTotal(newBilling.items);
       
@@ -252,6 +265,8 @@ const BillingSection = () => {
         paymentMode: "",
         items: [{ service: "", rate: 0, quantity: 1, total: 0 }]
       });
+      setSelectedClient(null);
+      setClientSearchTerm("");
       setShowNewBilling(false);
       
       toast({
@@ -281,150 +296,116 @@ const BillingSection = () => {
     }
   };
 
-  const requestReview = (billingRecord: BillingRecord) => {
-    const feedbackLink = `${window.location.origin}/feedback?name=${encodeURIComponent(billingRecord.clientName)}&contact=${encodeURIComponent(billingRecord.clientContact)}&service=${encodeURIComponent(billingRecord.items.map(item => item.service).join(', '))}`;
-    
-    const message = `Hi ${billingRecord.clientName}! Thank you for visiting our salon. We'd love to hear about your experience. Please leave us a review here: ${feedbackLink}`;
-    const whatsappUrl = `https://wa.me/${billingRecord.clientContact.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
   const generatePDFBill = async (billingRecord: BillingRecord) => {
     try {
+      console.log("Starting PDF generation for:", billingRecord);
+      
       // Dynamic import for jsPDF
       const jsPDF = (await import('jspdf')).default;
       
+      if (!jsPDF) {
+        throw new Error("Failed to load jsPDF library");
+      }
+      
       const doc = new jsPDF();
       
-      // Simple clean layout - no complex formatting
-      let yPosition = 20;
+      // Set font sizes
+      const titleSize = 20;
+      const headerSize = 14;
+      const normalSize = 12;
       
-      // Salon Header
-      doc.setFontSize(20);
-      doc.setFont('helvetica', 'bold');
-      doc.text('As Unisex Salon', 105, yPosition, { align: 'center' });
+      // Add salon header
+      doc.setFontSize(titleSize);
+      doc.setFont("helvetica", "bold");
+      doc.text("SALON BOOKING STUDIO", 105, 20, { align: "center" });
       
-      yPosition += 10;
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Shop No.7, Krushna Anand Complex, Near Tuljabhawani Temple', 105, yPosition, { align: 'center' });
+      // Add bill details
+      doc.setFontSize(headerSize);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Bill # ${billingRecord.id.slice(-6)}`, 20, 40);
+      doc.text(`Date: ${new Date(billingRecord.date).toLocaleDateString()}`, 20, 50);
+      doc.text(`Payment Mode: ${billingRecord.paymentMode.toUpperCase()}`, 20, 60);
       
-      yPosition += 6;
-      doc.text('Pipeline Road Sawedi, Ahilyanagar 414003', 105, yPosition, { align: 'center' });
+      // Customer details
+      doc.setFontSize(headerSize);
+      doc.setFont("helvetica", "bold");
+      doc.text("Customer Details:", 20, 80);
       
-      yPosition += 6;
-      doc.text('Phone: +91 98765 43210', 105, yPosition, { align: 'center' });
+      doc.setFontSize(normalSize);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Name: ${billingRecord.clientName}`, 20, 90);
+      doc.text(`Contact: ${billingRecord.clientContact}`, 20, 100);
+      doc.text(`Staff: ${billingRecord.staff}`, 20, 110);
       
-      yPosition += 15;
+      // Services table
+      doc.setFontSize(headerSize);
+      doc.setFont("helvetica", "bold");
+      doc.text("Services:", 20, 130);
       
-      // Bill Info
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Bill #: ${billingRecord.id.slice(-8).toUpperCase()}`, 20, yPosition);
-      doc.text(`Date: ${new Date(billingRecord.date).toLocaleDateString()}`, 120, yPosition);
+      let yPosition = 140;
+      doc.setFontSize(normalSize);
+      doc.setFont("helvetica", "normal");
       
-      yPosition += 10;
-      doc.text(`Status: ${billingRecord.status.toUpperCase()}`, 20, yPosition);
-      
-      yPosition += 15;
-      
-      // Client Info
-      doc.setFont('helvetica', 'bold');
-      doc.text('Client Details:', 20, yPosition);
-      
-      yPosition += 8;
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Name: ${billingRecord.clientName}`, 20, yPosition);
-      
-      yPosition += 6;
-      doc.text(`Contact: ${billingRecord.clientContact}`, 20, yPosition);
-      
-      yPosition += 6;
-      doc.text(`Staff: ${billingRecord.staff}`, 20, yPosition);
-      
-      yPosition += 6;
-      doc.text(`Payment: ${billingRecord.paymentMode}`, 20, yPosition);
-      
-      yPosition += 15;
-      
-      // Services Header
-      doc.setFont('helvetica', 'bold');
-      doc.text('Services:', 20, yPosition);
-      
-      yPosition += 8;
-      
-      // Table Headers
-      doc.text('Service', 20, yPosition);
-      doc.text('Rate', 80, yPosition);
-      doc.text('Qty', 120, yPosition);
-      doc.text('Total', 150, yPosition);
-      
-      yPosition += 5;
-      
-      // Line under headers
-      doc.line(20, yPosition, 180, yPosition);
-      yPosition += 8;
-      
-      // Services List
-      doc.setFont('helvetica', 'normal');
-      billingRecord.items.forEach((item) => {
-        const serviceName = item.service || 'Service';
-        const rate = Number(item.rate) || 0;
-        const quantity = Number(item.quantity) || 1;
-        const total = Number(item.total) || (rate * quantity);
-        
-        // Convert to plain strings - no formatting issues
-        const rateStr = String(Math.round(rate));
-        const quantityStr = String(Math.round(quantity));
-        const totalStr = String(Math.round(total));
-        
-        doc.text(serviceName, 20, yPosition);
-        doc.text('Rs. ' + rateStr, 80, yPosition);
-        doc.text(quantityStr, 120, yPosition);
-        doc.text('Rs. ' + totalStr, 150, yPosition);
-        
-        yPosition += 6;
+      billingRecord.items.forEach((item, index) => {
+        doc.text(`${index + 1}. ${item.service}`, 20, yPosition);
+        doc.text(`Rate: ₹${item.rate}`, 20, yPosition + 7);
+        doc.text(`Quantity: ${item.quantity}`, 20, yPosition + 14);
+        doc.text(`Total: ₹${item.total}`, 20, yPosition + 21);
+        yPosition += 30;
       });
       
-      // Line after services
-      yPosition += 2;
-      doc.line(20, yPosition, 180, yPosition);
+      // Total amount
+      doc.setDrawColor(200, 200, 200);
+      doc.rect(20, yPosition, 170, 30);
       
-      yPosition += 10;
-      
-      // Total
-      doc.setFont('helvetica', 'bold');
-      doc.text('Total Amount:', 120, yPosition);
-      
-      const totalAmount = Number(billingRecord.totalAmount) || 0;
-      const totalAmountStr = String(Math.round(totalAmount));
-      
-      doc.setFontSize(14);
-      doc.text('Rs. ' + totalAmountStr, 150, yPosition);
-      
-      yPosition += 20;
+      doc.setFontSize(headerSize);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Total Amount: ₹${billingRecord.totalAmount}`, 25, yPosition + 20);
       
       // Footer
       doc.setFontSize(10);
-      doc.setFont('helvetica', 'italic');
-      doc.text('Thank you for visiting As Unisex Salon!', 105, yPosition, { align: 'center' });
+      doc.setFont("helvetica", "italic");
+      doc.text("Thank you for your visit!", 105, 280, { align: "center" });
+      doc.text("Please share your feedback: " + `${window.location.origin}/feedback`, 105, 285, { align: "center" });
       
-      yPosition += 6;
-      doc.text('Please visit again', 105, yPosition, { align: 'center' });
+      // Generate PDF blob
+      const pdfBlob = new Blob([doc.output('blob')], { type: 'application/pdf' });
+      console.log("PDF generated successfully, blob size:", pdfBlob.size);
       
-      // Save the PDF
-      const fileName = `AsUnisexSalon_Bill_${billingRecord.clientName.replace(/\s+/g, '_')}_${billingRecord.date}.pdf`;
-      doc.save(fileName);
-      
-      toast({
-        title: "PDF Generated Successfully",
-        description: `Bill generated for ${billingRecord.clientName}`,
-      });
+      return pdfBlob;
     } catch (error) {
       console.error("Error generating PDF:", error);
+      throw error;
+    }
+  };
+
+  const requestReview = async (billingRecord: BillingRecord) => {
+    try {
+      // Generate PDF bill
+      const pdfBlob = await generatePDFBill(billingRecord);
+      const pdfDataUrl = URL.createObjectURL(pdfBlob);
+      
+      // Create feedback link with customer info
+      const feedbackLink = `${window.location.origin}/feedback?name=${encodeURIComponent(billingRecord.clientName)}&contact=${encodeURIComponent(billingRecord.clientContact)}&service=${encodeURIComponent(billingRecord.items.map(item => item.service).join(', '))}`;
+      
+      // Create message with feedback link
+      const message = `Hi ${billingRecord.clientName}! Thank you for visiting our salon. We'd love to hear about your experience. Please leave us a review here: ${feedbackLink}`;
+      
+      const whatsappUrl = `https://wa.me/${billingRecord.clientContact.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+      
+      // Also open PDF in new tab for manual download/send
+      window.open(pdfDataUrl, '_blank');
+      
+      toast({
+        title: "Review Requested",
+        description: "WhatsApp opened with feedback link. PDF also opened in new tab.",
+      });
+    } catch (error) {
+      console.error("Error requesting review:", error);
       toast({
         title: "Error",
-        description: "Failed to generate PDF. Please try again.",
+        description: "Failed to send review request. Please try again.",
         variant: "destructive",
       });
     }
@@ -435,15 +416,6 @@ const BillingSection = () => {
     record.clientContact.includes(searchTerm) ||
     record.staff.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // Check if a record was auto-generated from completed booking
-  const isAutoGenerated = (record: BillingRecord) => {
-    return completedBookings.some(booking => 
-      booking.phone === record.clientContact && 
-      booking.date === record.date &&
-      booking.status === "completed"
-    );
-  };
 
   if (loading) {
     return (
@@ -480,23 +452,90 @@ const BillingSection = () => {
             <div className="space-y-6">
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4">
+                <div className="relative">
+                  <Label htmlFor="client-search">Search Client</Label>
+                  <div className="relative">
+                    <Input
+                      id="client-search"
+                      placeholder="Search by name or phone..."
+                      value={clientSearchTerm}
+                      onChange={(e) => {
+                        setClientSearchTerm(e.target.value);
+                        setShowClientDropdown(true);
+                      }}
+                      onFocus={() => setShowClientDropdown(true)}
+                    />
+                    {selectedClient && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-2 top-2 h-6 w-6 p-0"
+                        onClick={clearClientSelection}
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Client Dropdown */}
+                  {showClientDropdown && clientSearchTerm && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {filteredClients.length > 0 ? (
+                        filteredClients.map((client) => (
+                          <div
+                            key={client.id}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => selectClient(client)}
+                          >
+                            <div className="font-medium">{client.name}</div>
+                            <div className="text-sm text-gray-500">{client.phone}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          No clients found. Enter details manually below.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
                 <div>
                   <Label htmlFor="client-name">Client Name</Label>
                   <Input
                     id="client-name"
+                    placeholder="Client name"
                     value={newBilling.clientName}
-                    onChange={(e) => setNewBilling({ ...newBilling, clientName: e.target.value })}
+                    onChange={(e) => {
+                      setNewBilling({ ...newBilling, clientName: e.target.value });
+                      setSelectedClient(null); // Clear selection if manually edited
+                    }}
                   />
                 </div>
+                
                 <div>
-                  <Label htmlFor="client-contact">Client Contact</Label>
+                  <Label htmlFor="client-contact">Contact</Label>
                   <Input
                     id="client-contact"
+                    placeholder="Phone number"
                     value={newBilling.clientContact}
-                    onChange={(e) => setNewBilling({ ...newBilling, clientContact: e.target.value })}
+                    onChange={(e) => {
+                      setNewBilling({ ...newBilling, clientContact: e.target.value });
+                      setSelectedClient(null); // Clear selection if manually edited
+                    }}
                   />
                 </div>
               </div>
+
+              {/* Selected Client Info */}
+              {selectedClient && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm font-medium text-green-800">
+                    ✓ Selected: {selectedClient.name} ({selectedClient.phone})
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -642,19 +681,13 @@ const BillingSection = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredRecords.map((record) => (
-                  <tr key={record.id} className={`hover:bg-gray-50 ${isAutoGenerated(record) ? 'bg-blue-50' : ''}`}>
+                  <tr key={record.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
                           <p className="font-medium">{record.clientName}</p>
                           <p className="text-sm text-gray-500">{record.clientContact}</p>
                         </div>
-                        {isAutoGenerated(record) && (
-                          <Badge className="ml-2 bg-blue-100 text-blue-800">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Auto
-                          </Badge>
-                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
